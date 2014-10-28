@@ -4,6 +4,10 @@ mkdir debug
 cd debug
 
 cmake -DCMAKE_BUILD_TYPE=Debug ../
+
+[per usare clang]
+cmake -DCMAKE_C_COMPILER=clang-3.5
+
 make
 
 RUN:

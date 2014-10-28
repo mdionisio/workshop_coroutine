@@ -74,8 +74,8 @@ volatile bool contextConsumerValid = false;;
 int tmpData;
 bool tmpEof = true;
 
-volatile bool hereForCallProducer;
-volatile bool hereForCallContumer;
+bool hereForCallProducer;
+bool hereForCallContumer;
         
 void outdata(int data, bool eof) {
     hereForCallProducer = true;

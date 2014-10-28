@@ -1,0 +1,191 @@
+/* 
+ * File:   main.c
+ * Author: Michele Dionisio
+ *
+ * Created on 18 ottobre 2014
+ */
+
+#include "task.h"
+#include "taskev.h"
+
+#include <stdio.h>
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <string.h>
+#include <stdlib.h>
+#include <errno.h>
+
+#include <event2/buffer.h>
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+/// Start Example
+static const char MESSAGE[] = "Hello, World!\n";
+/** task that read from socket
+ *
+ * @param tid  my thread id
+ */
+void task_socket(tid_t const tid)
+{
+    INIT_TASK;
+    
+    evutil_socket_t * const fd = (evutil_socket_t *)(THIS_TASK->data);
+    /* We got a new connection! Set up a bufferevent for it. */
+    struct bufferevent *bev = bufferevent_socket_new(THIS_SCHED->base, *fd, BEV_OPT_CLOSE_ON_FREE);
+        
+    DEF_SOCKET_RETVAL(retval);
+    
+    int running = 1;
+
+    while (running) {
+        if (YIELD_EVSOCKET(bev, retval)) {
+            switch(retval.type) {
+                case READ:
+                    {
+                        struct evbuffer *input = bufferevent_get_input(bev);
+                        //int evbuffer_drain(struct evbuffer *buf, size_t len);
+                        //drain data
+                        //int evbuffer_remove(struct evbuffer *buf, void *data, size_t datlen);
+                        //drain data and copi it
+                        size_t len = evbuffer_get_length(input);
+                        if (len) {
+                            evbuffer_drain(input, len);
+                            bufferevent_write(bev, MESSAGE, strlen(MESSAGE));
+                            printf("Drained %lu bytes from buffer %d\n",
+                                 (unsigned long) len, tid);
+                        }
+                    }
+                    break;
+                case WRITE:
+                    break;
+                case EVENT:
+                    if (retval.events & BEV_EVENT_ERROR) {
+                        perror("Error from bufferevent");
+                    }
+                    if (retval.events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
+                        running = 0;
+                    }
+                    break;
+            }
+        }
+    }
+    RESET_SOCKET_RETVAL(retval);
+    
+    bufferevent_free(bev);
+
+    RETURN_TASK(2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+/** task that accept new socket
+ *
+ * @param tid  my thread id
+ */
+void task_listen(tid_t const tid)
+{
+    INIT_TASK;
+    
+    struct evconnlistener *listener;
+    struct sockaddr_in sin;
+
+    /* Clear the sockaddr before using it, in case there are extra
+     * platform-specific fields that can mess us up. */
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = INADDR_ANY;
+    sin.sin_port = htons(1234);
+    
+    /* Create a new listener */
+    listener = evconnlistener_new_bind(THIS_SCHED->base, NULL, NULL,
+				       LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, -1,
+				       (struct sockaddr *) &sin, sizeof(sin));
+    
+    if (!listener) {
+	perror("Couldn't create listener");
+	RETURN_TASK(1);
+    }
+    
+    DEF_LISTEN_RETVAL(returnValue);
+    
+    while (returnValue.isError == 0) {
+      if (YIELD_EVACCEPT(listener, returnValue)) {
+        if (returnValue.isError == 0) {
+          printf("connection accepted\n");
+          tid_t const tid = new_task_sched(THIS_SCHED, (taskFunc_t) task_socket);
+          
+          evutil_socket_t * const pTmp = (evutil_socket_t *)malloc(sizeof(evutil_socket_t));
+          *(pTmp) = returnValue.fd;
+          
+          task_t * const newReadtask = getTask(tid);
+          newReadtask->data = (void *)pTmp;
+        } else {
+          fprintf(stderr, "Got an error %d (%s) on the listener. "
+                  "Shutting down.\n", returnValue.err, evutil_socket_error_to_string(returnValue.err));
+        }
+      }
+    }
+    
+    RESET_LISTEN_RETVAL(returnValue);
+    
+    evconnlistener_free(listener);
+    listener = NULL;
+
+    RETURN_TASK(0);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+	
+
+
+/** task that accept new socket
+ *
+ * @param tid  my thread id
+ */
+void task_counter(tid_t const tid) {
+    INIT_TASK;
+    
+    struct timeval const five_sec = { 5, 0 };
+    
+    int i = 0;
+    while (1) {        
+        if (YIELD_EVSLEEP(five_sec)) {
+            printf("counter %d\n", i++);
+        }
+    }
+    RETURN_TASK(0);
+}
+
+
+
+/** MAIN
+ * 
+ * @param argc
+ * @param argv
+ * @return 
+ */
+int main(int argc, char *argv[])
+{
+    // create a new cooperative scheduler
+    sched_t *sched = create_sched();
+
+    // add to the scheduler same task
+    new_task_sched(sched, (taskFunc_t) task_listen);
+    new_task_sched(sched, (taskFunc_t) task_counter);
+
+    // start scheduler
+    mainloop_sched(sched);
+
+    // scheduling is terminated so the scheduler can be detroyed
+    destroy_sched(&sched);
+
+    return 0;
+}
+

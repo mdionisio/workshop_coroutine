@@ -162,14 +162,13 @@ int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketR
 int bufferevent_write(struct bufferevent *bufev,
     const void *data, size_t size);
 
-int yield_socket_write(task_t * const task, struct bufferevent * const bev, void * const data, size_t size) {
-    socketReturn_t returnValue;
-    init_socketReturn(&returnValue, task);
-    bufferevent_setcb(bev, /* read */NULL, /* write */ echo_write_cb, /* event */ echo_event_cb, &returnValue);
+int yield_socket_write(task_t * const task, struct bufferevent * const bev, void * const data, size_t size, socketReturn_t * const returnValue) {
+    init_socketReturn(returnValue, task);
+    bufferevent_setcb(bev, /* read */NULL, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
     bufferevent_enable(bev, EV_WRITE );
     bufferevent_write(bev, data, size);
     suspend_task(task);  // task suspend;
     bufferevent_disable(bev, EV_WRITE );
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
-    return returnValue.evEvent;
+    return returnValue->evEvent;
 }

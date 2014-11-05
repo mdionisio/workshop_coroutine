@@ -43,8 +43,8 @@ int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketR
 #define RESET_SOCKET_RETVAL(x) reset_socketReturn(&x)
 #define YIELD_EVSOCKET(x,y) yield_socket_ev(THIS_TASK, x, &y)
 
-int yield_socket_write(task_t * const task, struct bufferevent *bufev, void * const data, size_t size);
+int yield_socket_write(task_t * const task, struct bufferevent *bufev, void * const data, size_t size, socketReturn_t * const returnValue);
 
-#define YIELD_EVSOCKET_WRITE(bev, data, len) yield_socket_write(THIS_TASK, bev, data, len);
+#define YIELD_EVSOCKET_WRITE(bev, data, len, y) yield_socket_write(THIS_TASK, bev, data, len, &y)
 
 #endif

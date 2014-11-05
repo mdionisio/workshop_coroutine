@@ -44,6 +44,7 @@ void task_socket(tid_t const tid)
 
     while (running) {
         if (YIELD_EVSOCKET(bev, retval)) {
+            checkreturn:            // label to mark check returned value
             switch(retval.type) {
                 case READ:
                     {
@@ -57,14 +58,15 @@ void task_socket(tid_t const tid)
                             evbuffer_drain(input, len);
                             printf("Drained %lu bytes from buffer %d\n",
                                  (unsigned long) len, tid);
-                            //bufferevent_write(bev, MESSAGE, strlen(MESSAGE));
-                            YIELD_EVSOCKET_WRITE(bev, MESSAGE, strlen(MESSAGE))
-                            printf("data write\n");
+                            
+                            YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, strlen(MESSAGE), retval);
+                            goto checkreturn; // goto check feedback
                             
                         }
                     }
                     break;
                 case WRITE:
+                    printf("data write\n");
                     break;
                 case EVENT:
                     if (retval.events & BEV_EVENT_ERROR) {

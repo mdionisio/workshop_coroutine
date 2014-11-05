@@ -55,9 +55,12 @@ void task_socket(tid_t const tid)
                         size_t len = evbuffer_get_length(input);
                         if (len) {
                             evbuffer_drain(input, len);
-                            bufferevent_write(bev, MESSAGE, strlen(MESSAGE));
                             printf("Drained %lu bytes from buffer %d\n",
                                  (unsigned long) len, tid);
+                            //bufferevent_write(bev, MESSAGE, strlen(MESSAGE));
+                            YIELD_EVSOCKET_WRITE(bev, MESSAGE, strlen(MESSAGE))
+                            printf("data write\n");
+                            
                         }
                     }
                     break;

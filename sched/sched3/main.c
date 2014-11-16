@@ -9,6 +9,7 @@
 #include "taskev.h"
 
 #include <stdio.h>
+#include <ctype.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -30,8 +31,9 @@ static const char MESSAGE[] = "Hello, World!\n";
  */
 void task_socket(tid_t const tid)
 {
-    char readingBuffer[1024];
+    uint8_t readingBuffer[1024];
     int datalen;
+    int i;
     
     INIT_TASK;
     
@@ -50,8 +52,16 @@ checkreturn:            // label to mark check returned value
         switch(retval.type) {
             case READ:
                 if (datalen>0) {
-                    readingBuffer[datalen+1] = '\0';
-                    printf("receive %d data %s \n", datalen, (readingBuffer));
+                    printf("receive %d data:\n", datalen);
+                    for (i=0; i<datalen; i++) {
+                        if (isprint(readingBuffer[i])) {
+                            printf("%c", (char)readingBuffer[i]);
+                        } else {
+                            printf("\\x%02x", (int)readingBuffer[i]);
+                        }
+                    }
+                    printf("\n");
+                    
                     YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, strlen(MESSAGE), retval);
                     goto checkreturn; // goto check feedback
                 } else { // there is something strange

@@ -3,6 +3,7 @@
 #include <event2/event.h>
 #include <errno.h>
 #include <event2/util.h>
+#include <event2/buffer.h>
 
 // TIMEOUT
 
@@ -151,12 +152,52 @@ static void echo_write_cb(struct bufferevent *bev, void *ctx)
 
 int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue) {
     init_socketReturn(returnValue, task);
+    
+    // check if thereis data to drain
+    struct evbuffer * const input = bufferevent_get_input(bev);
+    if (NULL != input) {
+        if (evbuffer_get_length(input) > 0) {
+            returnValue->type = READ;
+            returnValue->evEvent = 1;
+            return returnValue->evEvent;
+        }
+    }
+    
     bufferevent_setcb(bev, /* read */echo_read_cb, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
+    bufferevent_enable(bev, EV_READ || EV_WRITE);
+    suspend_task(task);  // task suspend;
+    bufferevent_disable(bev, EV_READ || EV_WRITE);
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+    return returnValue->evEvent;
+}
+
+int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen) {
+    init_socketReturn(returnValue, task);
+    
+    // check if thereis data to drain
+    struct evbuffer * input = bufferevent_get_input(bev);
+    if (NULL != input) {
+        if (evbuffer_get_length(input) > 0) {
+            returnValue->type = READ;
+            returnValue->evEvent = 1;
+            goto ENDFUNC;
+        }
+    }
+    
+    bufferevent_setcb(bev, /* read */echo_read_cb, /* write */ NULL, /* event */ echo_event_cb, returnValue);
     bufferevent_enable(bev, EV_READ );
     suspend_task(task);  // task suspend;
     bufferevent_disable(bev, EV_READ );
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
-    return returnValue->evEvent;
+    
+    ENDFUNC:
+    if (returnValue->type == READ) {
+        input = bufferevent_get_input(bev);
+        if (NULL != input) {
+            return evbuffer_remove(input, data, datalen);
+        }
+    }
+    return -1;
 }
 
 int bufferevent_write(struct bufferevent *bufev,
@@ -164,7 +205,7 @@ int bufferevent_write(struct bufferevent *bufev,
 
 int yield_socket_write(task_t * const task, struct bufferevent * const bev, void * const data, size_t size, socketReturn_t * const returnValue) {
     init_socketReturn(returnValue, task);
-    bufferevent_setcb(bev, /* read */NULL, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
+    bufferevent_setcb(bev, /* read */ NULL, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
     bufferevent_enable(bev, EV_WRITE );
     bufferevent_write(bev, data, size);
     suspend_task(task);  // task suspend;

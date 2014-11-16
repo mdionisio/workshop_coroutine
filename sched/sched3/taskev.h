@@ -38,10 +38,12 @@ typedef struct socketReturn {
 
 void reset_socketReturn(socketReturn_t *const retval);
 int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue);
+int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen);
 
 #define DEF_SOCKET_RETVAL(x) socketReturn_t x; reset_socketReturn(&x)
 #define RESET_SOCKET_RETVAL(x) reset_socketReturn(&x)
 #define YIELD_EVSOCKET(x,y) yield_socket_ev(THIS_TASK, x, &y)
+#define YIELD_EVSOCKET_READ(x,y,data,sizedata) yield_socket_read(THIS_TASK, x, &y, data, sizedata)
 
 int yield_socket_write(task_t * const task, struct bufferevent *bufev, void * const data, size_t size, socketReturn_t * const returnValue);
 

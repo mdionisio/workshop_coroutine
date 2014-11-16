@@ -17,8 +17,6 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include <event2/buffer.h>
-
 ////////////////////////////////////////////////////////////////////////////////
 
 
@@ -32,6 +30,9 @@ static const char MESSAGE[] = "Hello, World!\n";
  */
 void task_socket(tid_t const tid)
 {
+    char readingBuffer[1024];
+    int datalen;
+    
     INIT_TASK;
     
     evutil_socket_t * const fd = (evutil_socket_t *)(THIS_TASK->data);
@@ -43,42 +44,35 @@ void task_socket(tid_t const tid)
     int running = 1;
 
     while (running) {
-        if (YIELD_EVSOCKET(bev, retval)) {
-            checkreturn:            // label to mark check returned value
-            switch(retval.type) {
-                case READ:
-                    {
-                        struct evbuffer *input = bufferevent_get_input(bev);
-                        //int evbuffer_drain(struct evbuffer *buf, size_t len);
-                        //drain data
-                        //int evbuffer_remove(struct evbuffer *buf, void *data, size_t datlen);
-                        //drain data and copi it
-                        size_t len = evbuffer_get_length(input);
-                        if (len) {
-                            evbuffer_drain(input, len);
-                            printf("Drained %lu bytes from buffer %d\n",
-                                 (unsigned long) len, tid);
-                            
-                            YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, strlen(MESSAGE), retval);
-                            goto checkreturn; // goto check feedback
-                            
-                        }
-                    }
-                    break;
-                case WRITE:
-                    printf("data write\n");
-                    break;
-                case EVENT:
-                    if (retval.events & BEV_EVENT_ERROR) {
-                        perror("Error from bufferevent");
-                    }
-                    if (retval.events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
-                        running = 0;
-                    }
-                    break;
-            }
+        datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer)-1);
+        
+checkreturn:            // label to mark check returned value
+        switch(retval.type) {
+            case READ:
+                if (datalen>0) {
+                    readingBuffer[datalen+1] = '\0';
+                    printf("receive %d data %s \n", datalen, (readingBuffer));
+                    YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, strlen(MESSAGE), retval);
+                    goto checkreturn; // goto check feedback
+                } else { // there is something strange
+                    printf("no data to read any more \n");
+                    running = 0;
+                }
+                break;
+            case WRITE:
+                printf("data write\n");
+                break;
+            case EVENT:
+                if (retval.events & BEV_EVENT_ERROR) {
+                    perror("Error from bufferevent");
+                }
+                if (retval.events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
+                    running = 0;
+                }
+                break;
         }
-    }
+        
+    } // end while
     RESET_SOCKET_RETVAL(retval);
     
     bufferevent_free(bev);

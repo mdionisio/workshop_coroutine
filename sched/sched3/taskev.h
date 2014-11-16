@@ -14,7 +14,6 @@ int yield_sleep_ev(task_t * const task, const struct timeval * const time);
 #define YIELD_EVSLEEP(x) yield_sleep_ev(THIS_TASK, &x)
 
 typedef struct acceptReturn {
-  int evEvent;
   int isError;
   evutil_socket_t fd;
   int err;
@@ -30,7 +29,6 @@ int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, a
 #define YIELD_EVACCEPT(x,y) yield_accept_ev(THIS_TASK, x, &y)
 
 typedef struct socketReturn {
-  int evEvent;
   enum { READ, WRITE, EVENT } type;
   short events;
   task_t * task;

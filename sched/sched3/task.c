@@ -16,6 +16,8 @@
 #include <utlist.h>
 #include <uthash.h>
 
+#include <signal.h>
+
 #define CDL_POP_LAST(head, out)                                                \
   do {                                                                         \
     if (head) {                                                                \
@@ -125,6 +127,7 @@ static task_t * create_task(taskFunc_t ltaskFunc, sched_t * const lsched)
     // initialize where to save the stask
     task->tempData.uc_stack.ss_sp   = task->stack;
     task->tempData.uc_stack.ss_size = sizeof(task->stack);
+    sigfillset(&(task->tempData.uc_sigmask));  // is used to store the set of signals blocked in the context
 
     makecontext(&(task->tempData), (void (*)(void)) ltaskFunc, 1, task->tid);
 
@@ -316,6 +319,12 @@ void mainloop_sched(sched_t * const sched)
 {
     assert(NULL != sched);
     queueTask_t * task = NULL;
+    sigset_t oldset;
+    sigset_t maskset;
+    
+    // only libevent can manage signal and only when thereis noting to do
+    sigfillset(&maskset);
+    sigprocmask(SIG_SETMASK, &maskset, &oldset);  // disable all signal
 
     // loop while there is available task
     while (sched->numAvailableTask > 0) {
@@ -326,8 +335,10 @@ void mainloop_sched(sched_t * const sched)
 
         if (NULL == task) { // there is no task available to be scheduled
             printf("no task ready to be scheduled\n");
-            // libevent task dispaching
+            sigprocmask(SIG_SETMASK, &oldset, NULL);  // enable original
+            // libevent task dispaching        
 	    event_base_loop(sched->base, EVLOOP_ONCE /* EVLOOP_NONBLOCK */);
+            sigprocmask(SIG_SETMASK, &maskset, &oldset);  // disable all signal
         } else { // there is a task that can be scheduled
             printf("scheduler work on task ttid=%u status=%d\n",
                    task->task->tid, task->task->status);

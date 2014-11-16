@@ -124,7 +124,7 @@ void task_listen(tid_t const tid)
     DEF_LISTEN_RETVAL(returnValue);
     
     while (returnValue.isError == 0) {
-      if (YIELD_EVACCEPT(listener, returnValue)) {
+      if (YIELD_EVACCEPT(listener, returnValue) > 0) {
         if (returnValue.isError == 0) {
           printf("connection accepted\n");
           tid_t const tid = new_task_sched(THIS_SCHED, (taskFunc_t) task_socket);

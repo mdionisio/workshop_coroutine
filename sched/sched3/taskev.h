@@ -29,7 +29,7 @@ int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, a
 #define YIELD_EVACCEPT(x,y) yield_accept_ev(THIS_TASK, x, &y)
 
 typedef struct socketReturn {
-  enum { READ, WRITE, EVENT } type;
+  enum { UNKONWN = 0, READ, WRITE, EVENT } type;
   short events;
   task_t * task;
 } socketReturn_t;

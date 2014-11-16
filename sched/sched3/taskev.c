@@ -21,6 +21,7 @@ static void ev_timeout_cb(evutil_socket_t fd, short what, void *arg) {
 
 int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
     timeout_t arg;
+    arg.event = 0;
     arg.task = task;
     
     struct event * ev = event_new(  task->sched->base,       
@@ -100,11 +101,13 @@ int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, a
 // SOCKET
 
 static void init_socketReturn(socketReturn_t * const retval, task_t * const task) {
+    retval->type = UNKONWN;
     retval->task = task;
     retval->events = 0;
 }
 
 void reset_socketReturn(socketReturn_t *const retval) {
+    retval->type = UNKONWN;
     retval->events = 0;
 }
 

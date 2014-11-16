@@ -74,16 +74,20 @@ checkreturn:            // label to mark check returned value
                 break;
             case EVENT:
                 if (retval.events & BEV_EVENT_ERROR) {
-                    perror("Error from bufferevent");
+                    perror("Error from bufferevent\n");
                 }
                 if (retval.events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
                     running = 0;
                 }
                 break;
+            case UNKONWN:
+                perror("operation canceled\n");
+                running = 0;
+                break;
         }
-        
+        RESET_SOCKET_RETVAL(retval);
     } // end while
-    RESET_SOCKET_RETVAL(retval);
+    
     
     bufferevent_free(bev);
 
@@ -117,13 +121,14 @@ void task_listen(tid_t const tid)
 				       (struct sockaddr *) &sin, sizeof(sin));
     
     if (!listener) {
-	perror("Couldn't create listener");
+	perror("Couldn't create listener\n");
 	RETURN_TASK(1);
     }
     
     DEF_LISTEN_RETVAL(returnValue);
+    int running = 1;
     
-    while (returnValue.isError == 0) {
+    while (running) {
       if (YIELD_EVACCEPT(listener, returnValue) > 0) {
         if (returnValue.isError == 0) {
           printf("connection accepted\n");
@@ -137,11 +142,14 @@ void task_listen(tid_t const tid)
         } else {
           fprintf(stderr, "Got an error %d (%s) on the listener. "
                   "Shutting down.\n", returnValue.err, evutil_socket_error_to_string(returnValue.err));
+          running = 1;
         }
+      } else {
+            perror("operation canceled\n");
+            running = 1;
       }
-    }
-    
-    RESET_LISTEN_RETVAL(returnValue);
+      RESET_LISTEN_RETVAL(returnValue);
+    } // end while
     
     evconnlistener_free(listener);
     listener = NULL;
@@ -164,9 +172,13 @@ void task_counter(tid_t const tid) {
     struct timeval const five_sec = { 5, 0 };
     
     int i = 0;
-    while (1) {        
+    int running = 1;
+    while (running) {        
         if (YIELD_EVSLEEP(five_sec)) {
             printf("counter %d\n", i++);
+        } else {
+            perror("operation canceled\n");
+            running = 1;
         }
     }
     RETURN_TASK(0);

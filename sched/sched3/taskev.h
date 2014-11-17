@@ -7,7 +7,11 @@
 #include <event2/listener.h>
 #include <event2/bufferevent.h>
 
+#include <signal.h>
 
+int yield_signal_ev(task_t * const task, const short signal);
+
+#define YIELD_EVSIGNAL(x) yield_signal_ev(THIS_TASK, x)
 
 int yield_sleep_ev(task_t * const task, const struct timeval * const time);
 

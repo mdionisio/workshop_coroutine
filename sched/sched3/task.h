@@ -120,5 +120,11 @@ task_t * getTask(tid_t tid);
 #define SUSPEND suspend_task(THIS_TASK)
 #define RESUME(tid) schedule_task(getTask(tid))
 #define THIS_SCHED THIS_TASK->sched
+#define RESUMEP(ptid) schedule_task(ptid)
+
+typedef void (*iterOnTask)(task_t * const task);
+void iterAllTask(iterOnTask f);
+void iterSchedTask(iterOnTask f, const sched_t * const sched);
+
 
 #endif

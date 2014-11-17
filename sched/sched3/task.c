@@ -16,8 +16,6 @@
 #include <utlist.h>
 #include <uthash.h>
 
-#include <signal.h>
-
 #define CDL_POP_LAST(head, out)                                                \
   do {                                                                         \
     if (head) {                                                                \
@@ -274,6 +272,11 @@ void schedule_task(task_t * const task)
 {
     assert(NULL != task);
     
+    // already running
+    if (task->status == RUNNING) {
+        return;
+    }
+    
     queueTask_t * elIter = NULL;    
     CDL_FOREACH(task->sched->readyTask, elIter) {
         if (elIter->task == task) {
@@ -319,12 +322,6 @@ void mainloop_sched(sched_t * const sched)
 {
     assert(NULL != sched);
     queueTask_t * task = NULL;
-    sigset_t oldset;
-    sigset_t maskset;
-    
-    // only libevent can manage signal and only when thereis noting to do
-    sigfillset(&maskset);
-    sigprocmask(SIG_SETMASK, &maskset, &oldset);  // disable all signal
 
     // loop while there is available task
     while (sched->numAvailableTask > 0) {
@@ -335,10 +332,8 @@ void mainloop_sched(sched_t * const sched)
 
         if (NULL == task) { // there is no task available to be scheduled
             printf("no task ready to be scheduled\n");
-            sigprocmask(SIG_SETMASK, &oldset, NULL);  // enable original
             // libevent task dispaching        
 	    event_base_loop(sched->base, EVLOOP_ONCE /* EVLOOP_NONBLOCK */);
-            sigprocmask(SIG_SETMASK, &maskset, &oldset);  // disable all signal
         } else { // there is a task that can be scheduled
             printf("scheduler work on task ttid=%u status=%d\n",
                    task->task->tid, task->task->status);
@@ -397,3 +392,20 @@ task_t * getTask(tid_t tid) {
   }
 }
 
+typedef void (*iterOnTask)(task_t * const task);
+
+void iterAllTask(iterOnTask f) {
+    static mapTask_t *current_task, *tmp;
+    HASH_ITER(hh, gAvailableTask, current_task, tmp) {
+        (*f)(current_task->task);
+    }
+}
+
+void iterSchedTask(iterOnTask f, const sched_t * const sched) {
+    static mapTask_t *current_task, *tmp;
+    HASH_ITER(hh, gAvailableTask, current_task, tmp) {
+        if (current_task->task->sched == sched) {
+            (*f)(current_task->task);
+        }
+    }
+}

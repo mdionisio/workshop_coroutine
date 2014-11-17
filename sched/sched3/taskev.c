@@ -5,6 +5,44 @@
 #include <event2/util.h>
 #include <event2/buffer.h>
 
+// SIGNAL
+
+typedef struct signalinfo { 
+    task_t * task;
+    short event;
+    short signal;
+} signal_t;
+
+static void
+signal_cb(evutil_socket_t fd, short event, void *arg)
+{
+    signal_t * const signal = (signal_t *)arg;
+
+    signal->event = EV_SIGNAL;
+    schedule_task(signal->task);
+}
+
+int yield_signal_ev(task_t * const task, const short signal) {
+    struct event *ev;
+    signal_t arg;
+    
+    arg.task = task;
+    arg.event = 0;
+    arg.signal = signal;
+
+    /* call sighup_function on a HUP signal */
+    ev = evsignal_new(task->sched->base, signal, signal_cb, &arg);
+    
+    event_add(ev, NULL);      
+    
+    suspend_task(task);  // task suspend;
+    
+    event_del(ev);                                         
+    event_free(ev);  
+    
+    return (int)arg.event;
+}
+
 // TIMEOUT
 
 typedef struct timeoutinfo { 

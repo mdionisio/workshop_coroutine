@@ -81,15 +81,16 @@ checkreturn:            // label to mark check returned value
                 }
                 break;
             case UNKONWN:
-                perror("operation canceled\n");
+                printf("operation canceled %s\n", __func__);
                 running = 0;
                 break;
         }
         RESET_SOCKET_RETVAL(retval);
     } // end while
     
-    
     bufferevent_free(bev);
+    
+    printf("end %s\n", __func__);
 
     RETURN_TASK(2);
 }
@@ -142,17 +143,19 @@ void task_listen(tid_t const tid)
         } else {
           fprintf(stderr, "Got an error %d (%s) on the listener. "
                   "Shutting down.\n", returnValue.err, evutil_socket_error_to_string(returnValue.err));
-          running = 1;
+          running = 0;
         }
       } else {
-            perror("operation canceled\n");
-            running = 1;
+            printf("operation canceled %s\n", __func__);
+            running = 0;
       }
       RESET_LISTEN_RETVAL(returnValue);
     } // end while
     
     evconnlistener_free(listener);
     listener = NULL;
+    
+    printf("end %s\n", __func__);
 
     RETURN_TASK(0);
 }
@@ -162,7 +165,7 @@ void task_listen(tid_t const tid)
 	
 
 
-/** task that accept new socket
+/** task that show how sleep works
  *
  * @param tid  my thread id
  */
@@ -177,10 +180,35 @@ void task_counter(tid_t const tid) {
         if (YIELD_EVSLEEP(five_sec)) {
             printf("counter %d\n", i++);
         } else {
-            perror("operation canceled\n");
-            running = 1;
+            printf("operation canceled %s\n", __func__);
+            running = 0;
         }
     }
+    printf("end %s\n", __func__);
+    RETURN_TASK(0);
+}
+
+/** task that manage SIGINT signal
+ *
+ * @param tid  my thread id
+ */
+void task_signal(tid_t const tid) {
+    INIT_TASK;
+    
+    int running = 1;
+    while (running) {        
+        if (YIELD_EVSIGNAL(SIGINT)) {
+            printf("signal received\n");
+            // iter over all Scheduled task and wakeup it
+            iterSchedTask(schedule_task, THIS_SCHED);
+            running = 0;
+        } else {
+            printf("operation canceled %s\n", __func__);
+            running = 0;
+        }
+    }
+    
+    printf("end %s\n", __func__);
     RETURN_TASK(0);
 }
 
@@ -196,6 +224,9 @@ int main(int argc, char *argv[])
 {
     // create a new cooperative scheduler
     sched_t *sched = create_sched();
+    
+    // task to manage signal
+    new_task_sched(sched, (taskFunc_t) task_signal);
 
     // add to the scheduler same task
     new_task_sched(sched, (taskFunc_t) task_listen);
@@ -206,6 +237,8 @@ int main(int argc, char *argv[])
 
     // scheduling is terminated so the scheduler can be detroyed
     destroy_sched(&sched);
+    
+    printf("mainloop terminated\n");
 
     return 0;
 }

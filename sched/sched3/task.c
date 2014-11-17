@@ -1,3 +1,20 @@
+/*
+ *   This file is part of Cooperative-LibEvent.
+ *
+ *   Cooperative-LibEvent is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU Lesser General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   Cooperative-LibEvent is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU Lesser General Public License for more details.
+ *
+ *   You should have received a copy of the GNU Lesser General Public License
+ *   along with Cooperative-LibEvent.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* 
  * File:   task.c
  * Author: Michele Dionisio
@@ -15,6 +32,14 @@
 //used for list and map management
 #include <utlist.h>
 #include <uthash.h>
+
+// set define THREADSAFE_SCHED if you want to have threadshafe scheduler
+// to have more than one scheduler working on more than one thread
+//#define THREADSAFE_SCHED 1
+
+#ifdef THREADSAFE_SCHED
+#include <pthread.h>
+#endif
 
 #define CDL_POP_LAST(head, out)                                                \
   do {                                                                         \
@@ -41,7 +66,20 @@
 // *                        TASK/SCHEDULER DEFINITION                          *
 // *****************************************************************************
 
-static tid_t gTaskId = 0;          /**< global variable to give uniqui id to any task */
+static tid_t gTaskId = 0;          /**< global variable to give unique id to any task */
+static tid_t gSchedId = 0;         /**< global variable to give unique id to any scheduler */
+
+/** map type for from sid to sched
+ */
+typedef struct mapSched mapSched_t;
+
+/** map scheduler
+ */
+struct mapSched {
+    sid_t sid;                  /**< map key */
+    sched_t * sched;            /**< map value */
+    UT_hash_handle hh;          /**< makes this structure hashable */
+};
 
 typedef struct elemTaskList elemTaskList_t;
 
@@ -90,7 +128,16 @@ static void destroy_mapTask(mapTask_t ** const delTask) {
     }
 }
 
+static mapSched_t *gMapSched = NULL;     /**< define map for all available scheduler */
 static mapTask_t *gAvailableTask = NULL; /**< define map for all available task */
+#ifdef THREADSAFE_SCHED
+pthread_mutex_t gMutexAvailableTask = PTHREAD_MUTEX_INITIALIZER;
+#define LOCK_AVAILABLE_TASK pthread_mutex_lock(&gMutexAvailableTask)
+#define UNLOCK_AVAILABLE_TASK pthread_mutex_unlock(&gMutexAvailableTask)
+#else
+#define LOCK_AVAILABLE_TASK 
+#define UNLOCK_AVAILABLE_TASK 
+#endif
 
 
 // *****************************************************************************
@@ -108,7 +155,9 @@ static task_t * create_task(taskFunc_t ltaskFunc, sched_t * const lsched)
     assert(NULL != ltaskFunc);
     assert(NULL != lsched);
     task_t * const task = (task_t *) malloc(sizeof (task_t));
+    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
     task->tid = ++gTaskId;       // set unique id
+    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
     task->taskFunc = ltaskFunc;  // set function pointer to call
     task->status = WAIT;         // set task status
     task->returnValue = 0;       // set default return value
@@ -205,7 +254,9 @@ void wait_task(task_t * const task, tid_t tid)
 {
     assert(NULL != task);
     assert(task->tid != tid);
-
+    
+    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    
     mapTask_t *__mapTask__ = NULL;
     HASH_FIND_INT(gAvailableTask, &(tid), __mapTask__);
     assert(NULL != __mapTask__);
@@ -214,7 +265,12 @@ void wait_task(task_t * const task, tid_t tid)
     newWaitCond->next = NULL;
     newWaitCond->task = task;
     LL_PREPEND(__mapTask__->listWaiting, newWaitCond);
+    
+    UNLOCK_AVAILABLE_TASK;                 // safe access to gAvailableTask
+    
     suspend_task(task);
+    
+    
 }
 
 /** put a task in sleep and switch to the scheduler
@@ -242,10 +298,19 @@ void suspend_task(task_t * const task)
 sched_t * create_sched()
 {
     sched_t * const sched = (sched_t *) malloc(sizeof (sched_t));
+    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    sched->sid = ++gSchedId;                            // set scheduler id
     sched->numAvailableTask = 0;                        // set no available task
     sched->readyTask = NULL;                            // set empty list
     
     sched->base = event_base_new();
+    
+    mapSched_t * const newSched = (mapSched_t *) malloc(sizeof (mapSched_t));
+    newSched->sid = sched->sid;
+    newSched->sched = sched;
+    HASH_ADD_INT(gMapSched, sched->sid, newSched);
+    
+    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
 
     return sched;
 }
@@ -258,6 +323,13 @@ void destroy_sched(sched_t ** const sched)
 {
     assert(NULL != sched);
     if (NULL != *sched) {
+        LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+        mapSched_t * delSched = NULL;
+        HASH_FIND_INT(gMapSched, &((*sched)->sid), delSched);
+        HASH_DEL(gMapSched, delSched);
+        assert( (*sched) == (delSched->sched) );
+        free(delSched);
+        UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
         event_base_free((*sched)->base);
         free(*sched);
         *sched = NULL;
@@ -305,9 +377,15 @@ tid_t new_task_sched(sched_t * const sched, taskFunc_t ltaskFunc)
     mapTask_t * const newTask = create_mapTask(create_task(ltaskFunc, sched));
     //
     printf("-> newtask ttid=%u\n", newTask->tid);
+    
+    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    
     // add new element to the map
     HASH_ADD_INT(gAvailableTask, tid, newTask);
     ++(sched->numAvailableTask);
+    
+    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    
     // schede created task
     schedule_task(newTask->task);
     
@@ -322,6 +400,8 @@ void mainloop_sched(sched_t * const sched)
 {
     assert(NULL != sched);
     queueTask_t * task = NULL;
+    
+    mapTask_t *delTask = NULL;          // tmp variable to delete terminated task
 
     // loop while there is available task
     while (sched->numAvailableTask > 0) {
@@ -347,9 +427,13 @@ void mainloop_sched(sched_t * const sched)
                     printf("task terminated with return: %d "
                            "so remove it from availale task\n",
                            task->task->returnValue);
-                    mapTask_t *delTask = NULL;
+                    delTask = NULL;
+
+                    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
                     HASH_FIND_INT(gAvailableTask, &(task->task->tid), delTask);
                     HASH_DEL(gAvailableTask, delTask);
+                    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+
                     destroy_mapTask(&delTask);
                     free(task);
                     wakeup = 0;     // stop check status
@@ -384,7 +468,9 @@ void mainloop_sched(sched_t * const sched)
 
 task_t * getTask(tid_t tid) {
   mapTask_t *__mapTask__ = NULL;
+  LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
   HASH_FIND_INT(gAvailableTask, &(tid), __mapTask__);
+  UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
   if (NULL != __mapTask__) {
     return __mapTask__->task;
   } else {
@@ -392,20 +478,31 @@ task_t * getTask(tid_t tid) {
   }
 }
 
-typedef void (*iterOnTask)(task_t * const task);
-
+/** iterate over all the task available
+ * 
+ * @param f function to execute over each thread
+ */
 void iterAllTask(iterOnTask f) {
     static mapTask_t *current_task, *tmp;
+    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
     HASH_ITER(hh, gAvailableTask, current_task, tmp) {
         (*f)(current_task->task);
     }
+    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
 }
 
+/** iterate over all the task available for the selected scheduler
+ * 
+ * @param f function to execute over each thread
+ * @param sched scheduler
+ */
 void iterSchedTask(iterOnTask f, const sched_t * const sched) {
     static mapTask_t *current_task, *tmp;
+    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
     HASH_ITER(hh, gAvailableTask, current_task, tmp) {
         if (current_task->task->sched == sched) {
             (*f)(current_task->task);
         }
     }
+    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
 }

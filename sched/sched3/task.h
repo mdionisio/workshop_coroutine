@@ -1,3 +1,20 @@
+/*
+ *   This file is part of Cooperative-LibEvent.
+ *
+ *   Cooperative-LibEvent is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU Lesser General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   Cooperative-LibEvent is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU Lesser General Public License for more details.
+ *
+ *   You should have received a copy of the GNU Lesser General Public License
+ *   along with Cooperative-LibEvent.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* 
  * File:   task.h
  * Author: Michele Dionisio
@@ -39,6 +56,7 @@
 // *****************************************************************************
 
 typedef unsigned int tid_t; /**< type for unique task identifier */
+typedef unsigned int sid_t; /**< type for unique scheduler identifier */
 
 typedef struct task task_t;   /**< task type */
 typedef struct sched sched_t; /**< scheduler type */
@@ -86,6 +104,7 @@ struct queueTask {
 /** scheduler type
  */
 struct sched {
+    sid_t sid;                    /**< unique number to identify scheduler */
     unsigned int numAvailableTask;/**< number of task managed */
     queueTask_t *readyTask;       /**< list of ready to run task 
                                    * (uesed as queue) */

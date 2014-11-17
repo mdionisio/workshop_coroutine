@@ -1,3 +1,20 @@
+/*
+ *   This file is part of Cooperative-LibEvent.
+ *
+ *   Cooperative-LibEvent is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU Lesser General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   Cooperative-LibEvent is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU Lesser General Public License for more details.
+ *
+ *   You should have received a copy of the GNU Lesser General Public License
+ *   along with Cooperative-LibEvent.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* 
  * File:   main.c
  * Author: Michele Dionisio
@@ -222,19 +239,24 @@ void task_signal(tid_t const tid) {
  */
 int main(int argc, char *argv[])
 {
+    printf("Create Scheduler\n");
     // create a new cooperative scheduler
     sched_t *sched = create_sched();
     
-    // task to manage signal
+    printf("Create Signal Task\n");
     new_task_sched(sched, (taskFunc_t) task_signal);
 
-    // add to the scheduler same task
+    printf("Create Listening Task\n");
     new_task_sched(sched, (taskFunc_t) task_listen);
+    
+    printf("Create Counter Task\n");
     new_task_sched(sched, (taskFunc_t) task_counter);
 
+    printf("Start Mainloop\n");
     // start scheduler
     mainloop_sched(sched);
 
+    printf("Destroy Scheduler\n");
     // scheduling is terminated so the scheduler can be detroyed
     destroy_sched(&sched);
     

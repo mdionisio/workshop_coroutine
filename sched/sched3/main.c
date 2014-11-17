@@ -24,7 +24,7 @@
 
 
 /// Start Example
-static const char MESSAGE[] = "Hello, World!\n";
+static char const MESSAGE[] = "Hello, World!\n";
 /** task that read from socket
  *
  * @param tid  my thread id
@@ -62,7 +62,7 @@ checkreturn:            // label to mark check returned value
                     }
                     printf("\n");
                     
-                    YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, strlen(MESSAGE), retval);
+                    YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
                     goto checkreturn; // goto check feedback
                 } else { // there is something strange
                     printf("no data to read any more \n");
@@ -146,8 +146,8 @@ void task_listen(tid_t const tid)
           running = 0;
         }
       } else {
-            printf("operation canceled %s\n", __func__);
-            running = 0;
+        printf("operation canceled %s\n", __func__);
+        running = 0;
       }
       RESET_LISTEN_RETVAL(returnValue);
     } // end while
@@ -183,7 +183,7 @@ void task_counter(tid_t const tid) {
             printf("operation canceled %s\n", __func__);
             running = 0;
         }
-    }
+    } // end while
     printf("end %s\n", __func__);
     RETURN_TASK(0);
 }
@@ -206,7 +206,7 @@ void task_signal(tid_t const tid) {
             printf("operation canceled %s\n", __func__);
             running = 0;
         }
-    }
+    } // end while
     
     printf("end %s\n", __func__);
     RETURN_TASK(0);

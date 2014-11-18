@@ -79,6 +79,7 @@ checkreturn:            // label to mark check returned value
                     }
                     printf("\n");
                     
+                    RESET_SOCKET_RETVAL(retval);
                     YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
                     goto checkreturn; // goto check feedback
                 } else { // there is something strange

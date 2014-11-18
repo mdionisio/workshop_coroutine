@@ -63,7 +63,7 @@ void task_socket(tid_t const tid)
     int running = 1;
 
     while (running) {
-        datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer)-1);
+        datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
         
 checkreturn:            // label to mark check returned value
         switch(retval.type) {

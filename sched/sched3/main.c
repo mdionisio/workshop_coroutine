@@ -148,24 +148,30 @@ void task_listen(tid_t const tid)
     int running = 1;
     
     while (running && !ISSTOPREQUESTTASK) {
-      if (YIELD_EVACCEPT(listener, returnValue) > 0) {
-        if (returnValue.isError == 0) {
-          printf("connection accepted\n");
+      if (YIELD_EVACCEPT(listener, returnValue) > 0) { // task wakeup because something received
+        if (returnValue.isError == 0) {                // if there is no error
+          printf("connection accepted, create new task to manage connection\n");
+          
+          // create new task but do not automatically start the tasck
           tid_t const tid = new_task_sched(THIS_SCHED, 
                                            (taskFunc_t) task_socket, 
-                                           TASK_NONE);
+                                           TASK_CREATE_NOT_READY);  
           
+          // create and set data (socket) to send to the task
           evutil_socket_t * const pTmp = (evutil_socket_t *)malloc(sizeof(evutil_socket_t));
           *(pTmp) = returnValue.fd;
           
           task_t * const newReadtask = getTask(tid);
           newReadtask->data = (void *)pTmp;
-        } else {
+          
+          // now all the data is configured so we are redy to strt the task
+          schedule_task(newReadtask);
+        } else {                                       // there was en error in socket
           fprintf(stderr, "Got an error %d (%s) on the listener. "
                   "Shutting down.\n", returnValue.err, evutil_socket_error_to_string(returnValue.err));
           running = 0;
         }
-      } else {
+      } else {                                         // task wakeup for other reason
         printf("operation canceled %s\n", __func__);
         running = 0;
       }
@@ -197,13 +203,14 @@ void task_counter(tid_t const tid) {
     int i = 0;
     int running = 1;
     while (running && !ISSTOPREQUESTTASK) {        
-        if (YIELD_EVSLEEP(five_sec)) {
+        if (YIELD_EVSLEEP(five_sec)) {  // task wakeup for timeout
             printf("counter %d\n", i++);
-        } else {
+        } else {                        // task wakeup for other reason
             printf("operation canceled %s\n", __func__);
             running = 0;
         }
     } // end while
+    
     printf("end %s\n", __func__);
     RETURN_TASK(0);
 }
@@ -217,13 +224,13 @@ void task_signal(tid_t const tid) {
     
     int running = 1;
     while (running && !ISSTOPREQUESTTASK) {        
-        if (YIELD_EVSIGNAL(SIGINT)) {
+        if (YIELD_EVSIGNAL(SIGINT)) { // task wakeup for signal received
             printf("signal received\n");
             // iter over all Scheduled task and mark it to be stopped
             iterSchedTask(stopRequest_task, THIS_SCHED);
             // iter over all Scheduled task and wakeup it
             iterSchedTask(schedule_task, THIS_SCHED);
-        } else {
+        } else {                      // task wakeup for other reason
             printf("operation canceled %s\n", __func__);
             running = 0;
         }

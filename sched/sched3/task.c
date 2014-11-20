@@ -410,8 +410,10 @@ tid_t new_task_sched(sched_t * const sched,
     
     UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
     
-    // schede created task
-    schedule_task(newTask->task);
+    // schede created task it it is not have TASK_CREATE_NOT_READY property
+    if ( (config & TASK_CREATE_NOT_READY) == 0) {
+        schedule_task(newTask->task);
+    }
     
     return newTask->tid;
 }
@@ -430,7 +432,7 @@ void mainloop_sched(sched_t * const sched)
     // loop while there is available task
     
     while ( (!isStopRequested_sched(sched)) &&                          // is not stop requested
-            ! ( ((sched->config && SCHED_END_WITHOUT_TASKS) != 0) &&    // is configured to end if there is no task
+            ! ( ((sched->config & SCHED_END_WITHOUT_TASKS) != 0) &&    // is configured to end if there is no task
                 (sched->numAvailableTask == 0) ) ) {                     // if there is some task running
         if (!task) {
             // get a task that is waiting to run

@@ -62,7 +62,7 @@ void task_socket(tid_t const tid)
     
     int running = 1;
 
-    while (running) {
+    while (running && !ISSTOPREQUESTTASK) {
         datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
         
 checkreturn:            // label to mark check returned value
@@ -147,11 +147,13 @@ void task_listen(tid_t const tid)
     DEF_LISTEN_RETVAL(returnValue);
     int running = 1;
     
-    while (running) {
+    while (running && !ISSTOPREQUESTTASK) {
       if (YIELD_EVACCEPT(listener, returnValue) > 0) {
         if (returnValue.isError == 0) {
           printf("connection accepted\n");
-          tid_t const tid = new_task_sched(THIS_SCHED, (taskFunc_t) task_socket);
+          tid_t const tid = new_task_sched(THIS_SCHED, 
+                                           (taskFunc_t) task_socket, 
+                                           TASK_NONE);
           
           evutil_socket_t * const pTmp = (evutil_socket_t *)malloc(sizeof(evutil_socket_t));
           *(pTmp) = returnValue.fd;
@@ -194,7 +196,7 @@ void task_counter(tid_t const tid) {
     
     int i = 0;
     int running = 1;
-    while (running) {        
+    while (running && !ISSTOPREQUESTTASK) {        
         if (YIELD_EVSLEEP(five_sec)) {
             printf("counter %d\n", i++);
         } else {
@@ -214,12 +216,13 @@ void task_signal(tid_t const tid) {
     INIT_TASK;
     
     int running = 1;
-    while (running) {        
+    while (running && !ISSTOPREQUESTTASK) {        
         if (YIELD_EVSIGNAL(SIGINT)) {
             printf("signal received\n");
+            // iter over all Scheduled task and mark it to be stopped
+            iterSchedTask(stopRequest_task, THIS_SCHED);
             // iter over all Scheduled task and wakeup it
             iterSchedTask(schedule_task, THIS_SCHED);
-            running = 0;
         } else {
             printf("operation canceled %s\n", __func__);
             running = 0;
@@ -242,16 +245,16 @@ int main(int argc, char *argv[])
 {
     printf("Create Scheduler\n");
     // create a new cooperative scheduler
-    sched_t *sched = create_sched();
+    sched_t *sched = create_sched(SCHED_NONE || SCHED_END_WITHOUT_TASKS);
     
     printf("Create Signal Task\n");
-    new_task_sched(sched, (taskFunc_t) task_signal);
+    new_task_sched(sched, (taskFunc_t) task_signal, TASK_NONE);
 
     printf("Create Listening Task\n");
-    new_task_sched(sched, (taskFunc_t) task_listen);
+    new_task_sched(sched, (taskFunc_t) task_listen, TASK_NONE);
     
     printf("Create Counter Task\n");
-    new_task_sched(sched, (taskFunc_t) task_counter);
+    new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE);
 
     printf("Start Mainloop\n");
     // start scheduler

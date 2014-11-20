@@ -89,6 +89,9 @@ struct task {
     void * data;               /** taskParameter
                                  */
     char stack[SIGSTKSZ];      /**< task stack */
+    
+    unsigned int config;          /**< configuration */
+    unsigned int stop;            /**< true if ask to close */
 };
 
 typedef struct queueTask queueTask_t; /**< task queue type */
@@ -101,11 +104,18 @@ struct queueTask {
     queueTask_t *next;        /**< needed for singly- or doubly-linked lists */
 };
 
+#define SCHED_NONE                (0)
+#define SCHED_END_WITHOUT_TASKS   (1)
+
+#define TASK_NONE                 (0)
+
 /** scheduler type
  */
 struct sched {
     sid_t sid;                    /**< unique number to identify scheduler */
     unsigned int numAvailableTask;/**< number of task managed */
+    unsigned int config;          /**< configuration */
+    unsigned int stop;            /**< true if ask to close */
     queueTask_t *readyTask;       /**< list of ready to run task 
                                    * (uesed as queue) */
     ucontext_t tempData;          /**< structure to save task data when 
@@ -115,16 +125,33 @@ struct sched {
 
 // task
 void setReturnValue_task(task_t * const task, int value);
+
 void yield_task(task_t * const task);
+
 void wait_task(task_t * const task, tid_t tid);
+
 void suspend_task(task_t * const task);
+
 void schedule_task(task_t * const task);
+
+unsigned int isStopRequested_task(const task_t * const task);
+
+void stopRequest_task(task_t * const task);
 
 // schedule
 sched_t * create_sched();
+
 void destroy_sched(sched_t ** const sched);
-tid_t new_task_sched(sched_t * const sched, taskFunc_t ltaskFunc);
+
+tid_t new_task_sched(sched_t * const sched, 
+                     taskFunc_t ltaskFunc, 
+                     unsigned int config);
+
 void mainloop_sched(sched_t * const sched);
+
+unsigned int isStopRequested_sched(const sched_t * const sched);
+
+void stopRequest_sched(sched_t * const sched);
 
 // utiles
 task_t * getTask(tid_t tid);
@@ -138,6 +165,7 @@ task_t * getTask(tid_t tid);
 #define WAITTASK(x) wait_task(THIS_TASK, x)
 #define SUSPEND suspend_task(THIS_TASK)
 #define RESUME(tid) schedule_task(getTask(tid))
+#define ISSTOPREQUESTTASK isStopRequested_task(THIS_TASK)
 #define THIS_SCHED THIS_TASK->sched
 #define RESUMEP(ptid) schedule_task(ptid)
 

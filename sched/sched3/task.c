@@ -150,7 +150,9 @@ pthread_mutex_t gMutexAvailableTask = PTHREAD_MUTEX_INITIALIZER;
  * @param lsched scheduler that is managing this task
  * @return return a valid task
  */
-static task_t * create_task(taskFunc_t ltaskFunc, sched_t * const lsched)
+static task_t * create_task(taskFunc_t ltaskFunc, 
+                            sched_t * const lsched,
+                            unsigned int config)
 {
     assert(NULL != ltaskFunc);
     assert(NULL != lsched);
@@ -163,6 +165,8 @@ static task_t * create_task(taskFunc_t ltaskFunc, sched_t * const lsched)
     task->returnValue = 0;       // set default return value
     task->sched = lsched;        // set scheduler where the task run
     task->data = NULL;           // in data for thread
+    task->stop = 0;              // set request to stop to false
+    task->config = config;       // set configuration
 
     // initialize takein it from what is running now
     if (getcontext(&(task->tempData)) == -1) {
@@ -269,8 +273,6 @@ void wait_task(task_t * const task, tid_t tid)
     UNLOCK_AVAILABLE_TASK;                 // safe access to gAvailableTask
     
     suspend_task(task);
-    
-    
 }
 
 /** put a task in sleep and switch to the scheduler
@@ -287,6 +289,15 @@ void suspend_task(task_t * const task)
     // if you are here means that you are waking up
 }
 
+unsigned int isStopRequested_task(const task_t * const task) {
+    assert(NULL != task);
+    return task->stop;
+}
+
+void stopRequest_task(task_t * const task) {
+    task->stop = 1;
+}
+
 ///
 /// SCHEDULER IMPLEMENTATION
 ///
@@ -295,13 +306,15 @@ void suspend_task(task_t * const task)
  *
  * @return return a valid scheduler
  */
-sched_t * create_sched()
+sched_t * create_sched(unsigned int config)
 {
     sched_t * const sched = (sched_t *) malloc(sizeof (sched_t));
     LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
     sched->sid = ++gSchedId;                            // set scheduler id
     sched->numAvailableTask = 0;                        // set no available task
     sched->readyTask = NULL;                            // set empty list
+    sched->config = config;                             // configure scheduler
+    sched->stop = 0;                                    // set stop to don't stop
     
     sched->base = event_base_new();
     
@@ -313,6 +326,14 @@ sched_t * create_sched()
     UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
 
     return sched;
+}
+
+unsigned int isStopRequested_sched(const sched_t * const sched) {
+    return sched->stop;
+}
+
+void stopRequest_sched(sched_t * const sched) {
+    sched->stop = 1;
 }
 
 /** destroy a scheduler
@@ -368,13 +389,16 @@ void schedule_task(task_t * const task)
  * 
  * @param sched scheduler
  * @param ltaskFunc function fointer to the task function
+ * @param config task config
  */
-tid_t new_task_sched(sched_t * const sched, taskFunc_t ltaskFunc)
+tid_t new_task_sched(sched_t * const sched, 
+                     taskFunc_t ltaskFunc, 
+                     unsigned int config)
 {
     assert(NULL != sched);
     assert(NULL != ltaskFunc);
     // create new element for available map
-    mapTask_t * const newTask = create_mapTask(create_task(ltaskFunc, sched));
+    mapTask_t * const newTask = create_mapTask(create_task(ltaskFunc, sched, config));
     //
     printf("-> newtask ttid=%u\n", newTask->tid);
     
@@ -404,7 +428,10 @@ void mainloop_sched(sched_t * const sched)
     mapTask_t *delTask = NULL;          // tmp variable to delete terminated task
 
     // loop while there is available task
-    while (sched->numAvailableTask > 0) {
+    
+    while ( (!isStopRequested_sched(sched)) &&                          // is not stop requested
+            ! ( ((sched->config && SCHED_END_WITHOUT_TASKS) != 0) &&    // is configured to end if there is no task
+                (sched->numAvailableTask == 0) ) ) {                     // if there is some task running
         if (!task) {
             // get a task that is waiting to run
             CDL_POP_LAST(sched->readyTask, task);

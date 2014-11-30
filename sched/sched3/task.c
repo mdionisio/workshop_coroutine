@@ -51,8 +51,8 @@
         (head)->prev = (out)->prev;                                            \
         (head)->prev->next = (head);                                           \
       }                                                                        \
-      (out)->prev = NULL;                                                      \
-      (out)->next = NULL;                                                      \
+      (out)->prev = (out);                                                     \
+      (out)->next = (out);                                                        \
     } else {                                                                   \
       (out) = NULL;                                                            \
     }                                                                          \
@@ -214,6 +214,9 @@ static void run_task(task_t * const task)
         }
         break;
     case RUNNING:
+        // if you reach this point means that the task is terminated without call
+        // setReturnValue_task. This is teorically a programming problem but it 
+        // can be easy managed and so ...
         printf("missing setting of return value\n");
         setReturnValue_task(task, 0);
         break;
@@ -329,10 +332,12 @@ sched_t * create_sched(unsigned int config)
 }
 
 unsigned int isStopRequested_sched(const sched_t * const sched) {
+    assert(NULL != sched);
     return sched->stop;
 }
 
 void stopRequest_sched(sched_t * const sched) {
+    assert(NULL != sched);
     sched->stop = 1;
 }
 
@@ -490,7 +495,7 @@ void mainloop_sched(sched_t * const sched)
                 }
             } while (wakeup);
 
-            task = NULL;
+            task = NULL; // it is important to force next loop to choose another task
         }
     }
 }

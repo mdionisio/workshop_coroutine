@@ -352,6 +352,7 @@ void destroy_sched(sched_t ** const sched)
         LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
         mapSched_t * delSched = NULL;
         HASH_FIND_INT(gMapSched, &((*sched)->sid), delSched);
+        assert(NULL != delSched);
         HASH_DEL(gMapSched, delSched);
         assert( (*sched) == (delSched->sched) );
         free(delSched);
@@ -465,6 +466,7 @@ void mainloop_sched(sched_t * const sched)
 
                     LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
                     HASH_FIND_INT(gAvailableTask, &(task->task->tid), delTask);
+                    assert(delTask != NULL);
                     HASH_DEL(gAvailableTask, delTask);
                     UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
 

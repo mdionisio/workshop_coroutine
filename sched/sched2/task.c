@@ -340,6 +340,7 @@ void mainloop_sched(sched_t * const sched)
                            task->task->returnValue);
                     mapTask_t *delTask = NULL;
                     HASH_FIND_INT(gAvailableTask, &(task->task->tid), delTask);
+                    assert(delTask != NULL);
                     HASH_DEL(gAvailableTask, delTask);
                     destroy_mapTask(&delTask);
                     free(task);

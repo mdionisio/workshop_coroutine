@@ -318,6 +318,7 @@ void mainloop_sched(sched_t * const sched)
                        task->task->returnValue);
                 mapTask_t *delTask = NULL;
                 HASH_FIND_INT(gAvailableTask, &(task->task->tid), delTask);
+                assert(delTask != NULL);
                 HASH_DEL(gAvailableTask, delTask);
                 free(delTask);
                 destroy_task(&(task->task));
@@ -343,6 +344,7 @@ void mainloop_sched(sched_t * const sched)
 
 #define INIT_TASK mapTask_t *__mapTask__ = NULL;                               \
                   HASH_FIND_INT(gAvailableTask, &(tid), __mapTask__);          \
+                  assert(__mapTask__ != NULL);                                 \
                   task_t * const THIS_TASK = __mapTask__->task
  
 #define RETURN_TASK(x) setReturnValue_task(THIS_TASK, 1); return
@@ -371,6 +373,7 @@ void t0(tid_t const tid)
     // take task from tid
     mapTask_t *mapTask = NULL;
     HASH_FIND_INT(gAvailableTask, &(tid), mapTask);
+    assert(mapTask != NULL);
     task_t * const task = mapTask->task;
 
     // real task activity

@@ -162,6 +162,7 @@ void task_listen(tid_t const tid)
           *(pTmp) = returnValue.fd;
           
           task_t * const newReadtask = getTask(tid);
+          // this memory will be free when the task will be destroyed
           newReadtask->data = (void *)pTmp;
           
           // now all the data is configured so we are redy to strt the task

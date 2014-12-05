@@ -234,6 +234,11 @@ static void destroy_task(task_t ** const task)
 {
     assert(NULL != task);
     if (NULL != *task) {
+        // destroy data passed to start
+        if (NULL != (*task)->data) {
+            free((*task)->data);
+            (*task)->data = NULL;
+        }
         free(*task);
         *task = NULL;
     }

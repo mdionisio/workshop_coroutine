@@ -332,6 +332,10 @@ void mainloop_sched(sched_t * const sched)
             // loop to check status before and after a task execution
             do {
                 switch (task->task->status) {
+                case RUNNING:
+                    printf("task ttid=%u terminate "
+                           "without call setReturnValue_task\n", task->task->tid);
+                    setReturnValue_task(task->task, 0);
                 case TERMINATED :
                     // task is terminated so has to be removed
                     // from the list of available task
@@ -354,13 +358,6 @@ void mainloop_sched(sched_t * const sched)
                         CDL_PREPEND(sched->readyTask, task);
                         wakeup = 0; // stop check status
                     }
-                    break;
-                case RUNNING:
-                    printf("task ttid=%u terminate "
-                           "without call setReturnValue_task\n", task->task->tid);
-                    setReturnValue_task(task->task, 0);
-                    CDL_PREPEND(sched->readyTask, task);
-                    wakeup = 0;    // stop check status
                     break;
                 case SUSPENDED :
                     free(task);

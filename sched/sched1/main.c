@@ -310,6 +310,10 @@ void mainloop_sched(sched_t * const sched)
             printf("scheduler work on task ttid=%u status=%d\n",
                    task->task->tid, task->task->status);
             switch (task->task->status) {
+            case RUNNING:
+                printf("task ttid=%u terminate "
+                       "without call setReturnValue_task\n", task->task->tid);
+                setReturnValue_task(task->task, 0);
             case TERMINATED :
                 // task is terminated so has to be removed
                 // from the list of available task
@@ -327,12 +331,6 @@ void mainloop_sched(sched_t * const sched)
                 break;
             case WAIT :
                 run_task(task->task);
-                CDL_PREPEND(sched->readyTask, task);
-                break;
-            case RUNNING:
-                printf("task ttid=%u terminate "
-                       "without call setReturnValue_task\n", task->task->tid);
-                setReturnValue_task(task->task, 0);
                 CDL_PREPEND(sched->readyTask, task);
                 break;
             }

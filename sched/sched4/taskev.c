@@ -1,0 +1,274 @@
+/*
+ *   This file is part of Cooperative-LibEvent.
+ *
+ *   Cooperative-LibEvent is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU Lesser General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   Cooperative-LibEvent is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU Lesser General Public License for more details.
+ *
+ *   You should have received a copy of the GNU Lesser General Public License
+ *   along with Cooperative-LibEvent.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/* 
+ * File:   taskev.c
+ * Author: Michele Dionisio
+ *
+ * Created on 18 ottobre 2014
+ */
+
+#include "taskev.h"
+
+#include <event2/event.h>
+#include <errno.h>
+#include <event2/util.h>
+#include <event2/buffer.h>
+
+// SIGNAL
+
+typedef struct signalinfo { 
+    task_t * task;
+    short event;
+    short signal;
+} signal_t;
+
+static void
+signal_cb(evutil_socket_t fd, short event, void *arg)
+{
+    signal_t * const signal = (signal_t *)arg;
+
+    signal->event = EV_SIGNAL;
+    schedule_task(signal->task);
+}
+
+int yield_signal_ev(task_t * const task, const short signal) {
+    struct event *ev;
+    signal_t arg;
+    
+    arg.task = task;
+    arg.event = 0;
+    arg.signal = signal;
+
+    /* call sighup_function on a HUP signal */
+    ev = evsignal_new(task->sched->base, signal, signal_cb, &arg);
+    
+    event_add(ev, NULL);      
+    
+    suspend_task(task);  // task suspend;
+    
+    event_del(ev);                                         
+    event_free(ev);  
+    
+    return (int)arg.event;
+}
+
+// TIMEOUT
+
+typedef struct timeoutinfo { 
+    task_t * task;
+    short event;
+} timeout_t;
+
+static void ev_timeout_cb(evutil_socket_t fd, short what, void *arg) {
+    timeout_t * const timeout = (timeout_t*)arg;
+    
+    timeout->event = what;
+    schedule_task(timeout->task);
+}
+
+int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
+    timeout_t arg;
+    arg.event = 0;
+    arg.task = task;
+    
+    struct event * ev = event_new(  task->sched->base,       
+                                    -1,                
+                                    EV_TIMEOUT,        
+                                    ev_timeout_cb,     
+                                    &arg);        
+    event_add(ev, time);      
+    
+    suspend_task(task);  // task suspend;
+    
+    event_del(ev);                                         
+    event_free(ev);  
+    
+    return (int)arg.event;
+}
+
+// LISTEN
+
+
+static void init_acceptReturn(acceptReturn_t * const retval, struct evconnlistener * const listener, task_t * const task) {
+    retval->isError = 0;
+    retval->fd = -1;
+    retval->err = 0;
+    retval->task = task;
+    retval->listener = listener;
+}
+
+void reset_acceptReturn(acceptReturn_t *const retval) {
+    retval->isError = 0;
+    retval->fd = -1;
+    retval->err = 0;
+}
+
+static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *address, int socklen, void *ctx)
+{
+    acceptReturn_t * const retval = (acceptReturn_t *) ctx;
+    retval->isError = 0;
+    retval->fd = fd;
+    retval->err = 0;
+    schedule_task(retval->task);
+    // don't call any other callback on this
+    evconnlistener_disable(retval->listener);
+    evconnlistener_set_cb(listener, NULL, NULL);
+    evconnlistener_set_error_cb(listener, NULL);
+}
+ 
+static void accept_error_cb(struct evconnlistener *listener, void *ctx)
+{
+    acceptReturn_t * const retval = (acceptReturn_t *) ctx;
+    retval->isError = 1;
+    retval->fd = 0;
+    retval->err = EVUTIL_SOCKET_ERROR();
+    schedule_task(retval->task);
+    // don't call any other callback on this
+    evconnlistener_disable(retval->listener);
+    evconnlistener_set_cb(listener, NULL, NULL);
+    evconnlistener_set_error_cb(listener, NULL);
+}
+
+int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, acceptReturn_t * const returnValue) {
+    init_acceptReturn(returnValue, listen, task);
+    
+    evconnlistener_set_cb(listen, accept_conn_cb, returnValue);
+    evconnlistener_set_error_cb(listen, accept_error_cb);
+    evconnlistener_enable(listen);
+    
+    suspend_task(task);  // task suspend;
+      
+    evconnlistener_disable(listen);
+    evconnlistener_set_cb(listen, NULL, NULL);
+    evconnlistener_set_error_cb(listen, NULL);
+    
+    return returnValue->fd;
+}
+
+// SOCKET
+
+static void init_socketReturn(socketReturn_t * const retval, task_t * const task) {
+    retval->type = UNKONWN;
+    retval->task = task;
+    retval->events = 0;
+}
+
+void reset_socketReturn(socketReturn_t *const retval) {
+    retval->type = UNKONWN;
+    retval->events = 0;
+}
+
+static void echo_read_cb(struct bufferevent *bev, void *ctx)
+{
+    socketReturn_t * const retval = (socketReturn_t *)ctx;
+    retval->type = READ;
+    retval->events = EV_READ;
+    schedule_task(retval->task);
+    // don't call any other callback on this
+    
+    bufferevent_disable(bev, EV_READ | EV_WRITE);
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);  
+}
+
+static void echo_event_cb(struct bufferevent *bev, short events, void *ctx)
+{
+    socketReturn_t * const retval = (socketReturn_t *)ctx;
+    retval->type = EVENT;
+    retval->events = events;
+    schedule_task(retval->task);
+    // don't call any other callback on this
+    
+    bufferevent_disable(bev, EV_READ | EV_WRITE);
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);  
+}
+
+static void echo_write_cb(struct bufferevent *bev, void *ctx)
+{
+    socketReturn_t * const retval = (socketReturn_t *)ctx;
+    retval->type = WRITE;
+    retval->events = EV_WRITE;
+    schedule_task(retval->task);
+    // don't call any other callback on this
+    
+    bufferevent_disable(bev, EV_READ | EV_WRITE);
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);  
+}
+
+int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue) {
+    init_socketReturn(returnValue, task);
+    
+    // check if thereis data to drain
+    struct evbuffer * const input = bufferevent_get_input(bev);
+    if (NULL != input) {
+        if (evbuffer_get_length(input) > 0) {
+            returnValue->type = READ;
+            returnValue->events = EV_READ;
+            return returnValue->events;
+        }
+    }
+    
+    bufferevent_setcb(bev, /* read */echo_read_cb, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
+    bufferevent_enable(bev, EV_READ || EV_WRITE);
+    suspend_task(task);  // task suspend;
+    bufferevent_disable(bev, EV_READ || EV_WRITE);
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+    return returnValue->events;
+}
+
+int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen) {
+    init_socketReturn(returnValue, task);
+    
+    // check if thereis data to drain
+    struct evbuffer * input = bufferevent_get_input(bev);
+    if (NULL != input) {
+        if (evbuffer_get_length(input) > 0) {
+            returnValue->type = READ;
+            returnValue->events = EV_READ;
+            goto ENDFUNC;
+        }
+    }
+    
+    bufferevent_setcb(bev, /* read */echo_read_cb, /* write */ NULL, /* event */ echo_event_cb, returnValue);
+    bufferevent_enable(bev, EV_READ );
+    suspend_task(task);  // task suspend;
+    bufferevent_disable(bev, EV_READ );
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+    
+    ENDFUNC:
+    if (returnValue->type == READ) {
+        input = bufferevent_get_input(bev);
+        if (NULL != input) {
+            return evbuffer_remove(input, data, datalen);
+        }
+    }
+    return -1;
+}
+
+int bufferevent_write(struct bufferevent *bufev,
+    const void *data, size_t size);
+
+int yield_socket_write(task_t * const task, struct bufferevent * const bev, void * const data, size_t size, socketReturn_t * const returnValue) {
+    init_socketReturn(returnValue, task);
+    bufferevent_setcb(bev, /* read */ NULL, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
+    bufferevent_enable(bev, EV_WRITE );
+    bufferevent_write(bev, data, size);
+    suspend_task(task);  // task suspend;
+    bufferevent_disable(bev, EV_WRITE );
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+    return returnValue->events;
+}

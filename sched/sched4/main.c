@@ -201,12 +201,30 @@ void task_connect(tid_t const tid)
     printf("start %s\n", __func__);
     
     struct bufferevent *bev;
+    int datalen;
+    uint8_t readingBuffer[1024];
 
     bev = bufferevent_socket_new(THIS_SCHED->base, -1, BEV_OPT_CLOSE_ON_FREE);
     
     if ( YIELD_EVSOCKET_CONNECT(bev, NULL, AF_UNSPEC, "127.0.0.1", 1234, retval) == 0 ) {
         printf("connected %s\n", __func__);
+        RESET_SOCKET_RETVAL(retval);
         YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
+        // wait answer
+        RESET_SOCKET_RETVAL(retval);
+        datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
+        
+        if (datalen>0) {
+            printf("Stress receive %d data:\n", datalen);
+            for (int i=0; i<datalen; i++) {
+                if (isprint(readingBuffer[i])) {
+                    printf("%c", (char)readingBuffer[i]);
+                } else {
+                    printf("\\x%02x", (int)readingBuffer[i]);
+                }
+            }
+            printf("\n");
+        }
     } else {
         printf("error connecting %s\n", __func__);
     }
@@ -220,6 +238,41 @@ void task_connect(tid_t const tid)
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
+/** task that show how sleep works
+ *
+ * @param tid  my thread id
+ */
+void task_stress(tid_t const tid) {
+    INIT_TASK;
+       
+    struct timeval const five_sec = { 0, 500000 /* us */ };
+    
+    int i = 0;
+    int running = 1;
+    while (running && !ISSTOPREQUESTTASK) {        
+        if (YIELD_EVSLEEP(five_sec)) {  // task wakeup for timeout
+            
+            // create new task but do not automatically start the tasck
+            
+            printf("stress connect %d\n", i++);
+            
+            tid_t const tid = new_task_sched(THIS_SCHED, 
+                                             (taskFunc_t) task_connect, 
+                                             TASK_NONE);  
+            
+            printf("stress created connect %d %u\n", i++, tid);
+    
+            
+        } else {                        // task wakeup for other reason
+            printf("operation canceled %s\n", __func__);
+            running = 0;
+        }
+    } // end while
+    
+    printf("end %s\n", __func__);
+    RETURN_TASK(0);
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -314,6 +367,9 @@ int main(int argc, char *argv[])
     
     printf("Create Connect Task\n");
     new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE);    
+    
+    printf("Create Stress Task\n");
+    new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE);    
 
     printf("Start Mainloop\n");
     // start scheduler

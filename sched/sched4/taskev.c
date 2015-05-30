@@ -24,6 +24,8 @@
 
 #include "taskev.h"
 
+#include <assert.h>
+
 #include <event2/event.h>
 #include <errno.h>
 #include <event2/util.h>
@@ -41,13 +43,14 @@ static void
 signal_cb(evutil_socket_t fd, short event, void *arg)
 {
     signal_t * const signal = (signal_t *)arg;
+    assert( NULL != signal );
 
     signal->event = EV_SIGNAL;
     schedule_task(signal->task);
 }
 
 int yield_signal_ev(task_t * const task, const short signal) {
-    struct event *ev;
+    struct event *ev = NULL;
     signal_t arg;
     
     arg.task = task;
@@ -76,6 +79,7 @@ typedef struct timeoutinfo {
 
 static void ev_timeout_cb(evutil_socket_t fd, short what, void *arg) {
     timeout_t * const timeout = (timeout_t*)arg;
+    assert( NULL != timeout );
     
     timeout->event = what;
     schedule_task(timeout->task);
@@ -101,6 +105,52 @@ int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
     return (int)arg.event;
 }
 
+#ifdef THREADSAFE_SCHED
+
+struct callback_param {
+    struct event * ev;
+    tid_t tid;
+};
+
+static void ev_timeout_cb_thread(evutil_socket_t fd, short what, void *arg) {
+    struct callback_param * param = (struct callback_param*)arg;
+    assert( NULL != param );
+    assert( NULL != param->ev );
+    
+    event_del(param->ev);
+    param->ev = NULL;
+    
+    task_t * task = getTask(param->tid);
+    if (task != NULL) {
+        schedule_task(task);
+    }
+    
+    free(param);
+    param = NULL;
+}
+
+void wakeup_immediate(tid_t tid) {
+    static struct timeval const immediate = { 0 /* s */, 0 /* us */ };
+    
+    task_t * task = getTask(tid);
+    if (task != NULL) {
+        struct callback_param * param = (struct callback_param *) malloc(sizeof(struct callback_param));
+
+
+        struct event * ev = event_new(  task->sched->base,       
+                                        -1,                
+                                        EV_TIMEOUT,        
+                                        ev_timeout_cb_thread,     
+                                        param); 
+
+        param->tid = tid;
+        param->ev = ev;
+
+        event_add(ev, &immediate);
+    }
+}
+#endif
+
 // LISTEN
 
 
@@ -121,6 +171,8 @@ void reset_acceptReturn(acceptReturn_t *const retval) {
 static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *address, int socklen, void *ctx)
 {
     acceptReturn_t * const retval = (acceptReturn_t *) ctx;
+    assert( NULL != retval );
+    
     retval->isError = 0;
     retval->fd = fd;
     retval->err = 0;
@@ -134,6 +186,8 @@ static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd, 
 static void accept_error_cb(struct evconnlistener *listener, void *ctx)
 {
     acceptReturn_t * const retval = (acceptReturn_t *) ctx;
+    assert( NULL != retval );
+    
     retval->isError = 1;
     retval->fd = 0;
     retval->err = EVUTIL_SOCKET_ERROR();
@@ -176,6 +230,8 @@ void reset_socketReturn(socketReturn_t *const retval) {
 static void echo_read_cb(struct bufferevent *bev, void *ctx)
 {
     socketReturn_t * const retval = (socketReturn_t *)ctx;
+    assert( NULL != retval );
+    
     retval->type = READ;
     retval->events = EV_READ;
     schedule_task(retval->task);
@@ -188,6 +244,8 @@ static void echo_read_cb(struct bufferevent *bev, void *ctx)
 static void echo_event_cb(struct bufferevent *bev, short events, void *ctx)
 {
     socketReturn_t * const retval = (socketReturn_t *)ctx;
+    assert( NULL != retval );
+    
     retval->type = EVENT;
     retval->events = events;
     schedule_task(retval->task);
@@ -200,6 +258,8 @@ static void echo_event_cb(struct bufferevent *bev, short events, void *ctx)
 static void echo_write_cb(struct bufferevent *bev, void *ctx)
 {
     socketReturn_t * const retval = (socketReturn_t *)ctx;
+    assert( NULL != retval );
+    
     retval->type = WRITE;
     retval->events = EV_WRITE;
     schedule_task(retval->task);

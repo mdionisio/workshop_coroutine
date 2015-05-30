@@ -83,4 +83,12 @@ int yield_socket_write(task_t * const task, struct bufferevent *bufev, void * co
 
 #define YIELD_EVSOCKET_WRITE(bev, data, len, y) yield_socket_write(THIS_TASK, bev, data, len, &y)
 
+#ifdef THREADSAFE_SCHED
+
+void wakeup_immediate(tid_t tid);
+#define RESUME_FROM_THREAD(tid) wakeup_immediate(tid)
+
+#endif
+
+
 #endif

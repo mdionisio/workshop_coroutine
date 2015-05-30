@@ -46,6 +46,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "config.h"
+
 //used to have functions for context management
 #include <ucontext.h>
 
@@ -173,6 +175,5 @@ task_t * getTask(tid_t tid);
 typedef void (*iterOnTask)(task_t * const task);
 void iterAllTask(iterOnTask f);
 void iterSchedTask(iterOnTask f, const sched_t * const sched);
-
 
 #endif

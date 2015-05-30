@@ -46,6 +46,10 @@
 #include "config.h"
 
 #ifdef THREADSAFE_SCHED
+#include <event2/thread.h>
+#endif
+
+#ifdef THREADSAFE_SCHED
 #include <pthread.h>
 #endif
 
@@ -321,6 +325,8 @@ void stopRequest_task(task_t * const task) {
 /// SCHEDULER IMPLEMENTATION
 ///
 
+static int lib_event_initialized = 0;
+
 /** Create a new scheduler
  *
  * @return return a valid scheduler
@@ -335,7 +341,19 @@ sched_t * create_sched(unsigned int config)
     sched->config = config;                             // configure scheduler
     sched->stop = 0;                                    // set stop to don't stop
     
+    if (lib_event_initialized == 0) {
+#ifdef THREADSAFE_SCHED
+#ifdef WIN32
+        evthread_use_windows_threads();
+#else
+        evthread_use_pthreads();
+#endif
+#endif
+        lib_event_initialized = 1;
+    }
+        
     sched->base = event_base_new();
+    assert( NULL != sched->base );
     
     mapSched_t * const newSched = (mapSched_t *) malloc(sizeof (mapSched_t));
     newSched->sid = sched->sid;

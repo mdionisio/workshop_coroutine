@@ -230,6 +230,37 @@ int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketR
     return returnValue->events;
 }
 
+int yield_socket_ev_connect(task_t * const task, 
+                            struct bufferevent * const bev, 
+                            struct evdns_base * const dns_base, 
+                            int family, const char * hostname, int port,
+                            socketReturn_t * const returnValue) {
+    init_socketReturn(returnValue, task);
+    
+    bufferevent_setcb(bev, /* read */echo_read_cb, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
+    bufferevent_enable(bev, EV_READ || EV_WRITE);
+    
+    if (bufferevent_socket_connect_hostname(bev, dns_base, family, hostname, port) == -1) {
+        bufferevent_disable(bev, EV_READ || EV_WRITE);
+        bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+        returnValue->type = UNKONWN;
+        returnValue->events = 0;
+        return -1;
+    } else {
+        suspend_task(task);  // task suspend;
+        bufferevent_disable(bev, EV_READ || EV_WRITE);
+        bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+        
+        if ((returnValue->type == EVENT) && (returnValue->events & BEV_EVENT_CONNECTED)) {
+            return 0;
+        } else {
+            return -2;
+        }
+    }
+}
+
+
+
 int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen) {
     init_socketReturn(returnValue, task);
     

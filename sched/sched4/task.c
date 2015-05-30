@@ -489,7 +489,8 @@ void mainloop_sched(sched_t * const sched)
 
                     destroy_mapTask(&delTask);
                     free(task);
-                    wakeup = 0;     // stop check status
+                    task = NULL;
+                    wakeup = 0;    // stop check status
                     break;
                 case WAIT :
                     if (!wakeup) {
@@ -509,10 +510,10 @@ void mainloop_sched(sched_t * const sched)
                     break;
                 case SUSPENDED :
                     free(task);
-                    wakeup = 0;   // stop check status
+                    task = NULL;
                     break;
                 }
-            } while (wakeup);
+            } while ((task != NULL) && (wakeup != 0));
 
             task = NULL; // it is important to force next loop to choose another task
         }

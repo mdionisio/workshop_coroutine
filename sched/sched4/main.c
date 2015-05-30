@@ -188,10 +188,44 @@ void task_listen(tid_t const tid)
     RETURN_TASK(0);
 }
 
+/** task that connect to a listening socket 
+ *
+ * @param tid  my thread id
+ */
+void task_connect(tid_t const tid)
+{
+    INIT_TASK;
+    
+    DEF_SOCKET_RETVAL(retval);
+    
+    printf("start %s\n", __func__);
+    
+    struct bufferevent *bev;
+
+    bev = bufferevent_socket_new(THIS_SCHED->base, -1, BEV_OPT_CLOSE_ON_FREE);
+    
+    if ( YIELD_EVSOCKET_CONNECT(bev, NULL, AF_UNSPEC, "127.0.0.1", 1234, retval) == 0 ) {
+        printf("connected %s\n", __func__);
+        YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
+    } else {
+        printf("error connecting %s\n", __func__);
+    }
+    
+    bufferevent_free(bev);
+    
+    printf("end %s\n", __func__);
+
+    RETURN_TASK(0);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
 
 ////////////////////////////////////////////////////////////////////////////////
 	
 
+#include <sys/time.h>                // for gettimeofday()
 
 /** task that show how sleep works
  *
@@ -200,13 +234,24 @@ void task_listen(tid_t const tid)
 void task_counter(tid_t const tid) {
     INIT_TASK;
     
+    struct timeval t1;
+    struct timeval t2;
+    double elapsedTime;
+    
     struct timeval const five_sec = { 5, 0 };
     
     int i = 0;
     int running = 1;
     while (running && !ISSTOPREQUESTTASK) {        
+        gettimeofday(&t1, NULL);
         if (YIELD_EVSLEEP(five_sec)) {  // task wakeup for timeout
-            printf("counter %d\n", i++);
+            gettimeofday(&t2, NULL);
+            
+            // compute and print the elapsed time in millisec
+            elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+            elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+    
+            printf("counter %d (%lf ms)\n", i++, elapsedTime);
         } else {                        // task wakeup for other reason
             printf("operation canceled %s\n", __func__);
             running = 0;
@@ -266,6 +311,9 @@ int main(int argc, char *argv[])
     
     printf("Create Counter Task\n");
     new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE);
+    
+    printf("Create Connect Task\n");
+    new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE);    
 
     printf("Start Mainloop\n");
     // start scheduler

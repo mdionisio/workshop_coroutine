@@ -50,6 +50,7 @@ signal_cb(evutil_socket_t fd, short event, void *arg)
 }
 
 int yield_signal_ev(task_t * const task, const short signal) {
+    assert( NULL != task );
     struct event *ev = NULL;
     signal_t arg;
     
@@ -86,6 +87,9 @@ static void ev_timeout_cb(evutil_socket_t fd, short what, void *arg) {
 }
 
 int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
+    assert( NULL != task );
+    assert( NULL != time );
+
     timeout_t arg;
     arg.event = 0;
     arg.task = task;
@@ -155,6 +159,9 @@ void wakeup_immediate(tid_t tid) {
 
 
 static void init_acceptReturn(acceptReturn_t * const retval, struct evconnlistener * const listener, task_t * const task) {
+    assert( NULL != retval );
+    assert( NULL !=  listener );
+    assert( NULL !=  task );
     retval->isError = 0;
     retval->fd = -1;
     retval->err = 0;
@@ -172,6 +179,8 @@ static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd, 
 {
     acceptReturn_t * const retval = (acceptReturn_t *) ctx;
     assert( NULL != retval );
+    assert( NULL != address );
+    assert( NULL != listener );
     
     retval->isError = 0;
     retval->fd = fd;
@@ -187,6 +196,7 @@ static void accept_error_cb(struct evconnlistener *listener, void *ctx)
 {
     acceptReturn_t * const retval = (acceptReturn_t *) ctx;
     assert( NULL != retval );
+    assert( NULL != listener );
     
     retval->isError = 1;
     retval->fd = 0;
@@ -199,6 +209,9 @@ static void accept_error_cb(struct evconnlistener *listener, void *ctx)
 }
 
 int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, acceptReturn_t * const returnValue) {
+    assert( NULL != returnValue );
+    assert( NULL != listen );
+    assert( NULL != task );
     init_acceptReturn(returnValue, listen, task);
     
     evconnlistener_set_cb(listen, accept_conn_cb, returnValue);
@@ -217,12 +230,15 @@ int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, a
 // SOCKET
 
 static void init_socketReturn(socketReturn_t * const retval, task_t * const task) {
+    assert( NULL != retval );
+    assert( NULL != task );
     retval->type = UNKONWN;
     retval->task = task;
     retval->events = 0;
 }
 
 void reset_socketReturn(socketReturn_t *const retval) {
+    assert( NULL != retval );
     retval->type = UNKONWN;
     retval->events = 0;
 }
@@ -231,6 +247,7 @@ static void echo_read_cb(struct bufferevent *bev, void *ctx)
 {
     socketReturn_t * const retval = (socketReturn_t *)ctx;
     assert( NULL != retval );
+    assert( NULL != bev );
     
     retval->type = READ;
     retval->events = EV_READ;
@@ -245,6 +262,7 @@ static void echo_event_cb(struct bufferevent *bev, short events, void *ctx)
 {
     socketReturn_t * const retval = (socketReturn_t *)ctx;
     assert( NULL != retval );
+    assert( NULL != bev );
     
     retval->type = EVENT;
     retval->events = events;
@@ -259,6 +277,7 @@ static void echo_write_cb(struct bufferevent *bev, void *ctx)
 {
     socketReturn_t * const retval = (socketReturn_t *)ctx;
     assert( NULL != retval );
+    assert( NULL != bev );
     
     retval->type = WRITE;
     retval->events = EV_WRITE;
@@ -270,6 +289,9 @@ static void echo_write_cb(struct bufferevent *bev, void *ctx)
 }
 
 int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue) {
+    assert( NULL != returnValue );
+    assert( NULL != bev );
+    assert( NULL != task );
     init_socketReturn(returnValue, task);
     
     // check if thereis data to drain
@@ -295,6 +317,10 @@ int yield_socket_ev_connect(task_t * const task,
                             struct evdns_base * const dns_base, 
                             int family, const char * hostname, int port,
                             socketReturn_t * const returnValue) {
+    assert( NULL != returnValue );
+    assert( NULL != bev );
+    assert( NULL != hostname );
+    assert( NULL != task );
     init_socketReturn(returnValue, task);
     
     bufferevent_setcb(bev, /* read */echo_read_cb, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
@@ -322,6 +348,10 @@ int yield_socket_ev_connect(task_t * const task,
 
 
 int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen) {
+    assert( NULL != returnValue );
+    assert( NULL != data );
+    assert( 0 != datalen );
+    assert( NULL != task );
     init_socketReturn(returnValue, task);
     
     // check if thereis data to drain
@@ -354,12 +384,20 @@ int bufferevent_write(struct bufferevent *bufev,
     const void *data, size_t size);
 
 int yield_socket_write(task_t * const task, struct bufferevent * const bev, void * const data, size_t size, socketReturn_t * const returnValue) {
-    init_socketReturn(returnValue, task);
-    bufferevent_setcb(bev, /* read */ NULL, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
-    bufferevent_enable(bev, EV_WRITE );
-    bufferevent_write(bev, data, size);
-    suspend_task(task);  // task suspend;
-    bufferevent_disable(bev, EV_WRITE );
-    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
-    return returnValue->events;
+    assert( NULL != returnValue );
+    assert( NULL != task );
+    if ((size >0) && (data != NULL)) {
+        init_socketReturn(returnValue, task);
+        bufferevent_setcb(bev, /* read */ NULL, /* write */ echo_write_cb, /* event */ echo_event_cb, returnValue);
+        bufferevent_enable(bev, EV_WRITE );
+        bufferevent_write(bev, data, size);
+        suspend_task(task);  // task suspend;
+        bufferevent_disable(bev, EV_WRITE );
+        bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+        return returnValue->events;
+    } else {
+        returnValue->type = UNKONWN;
+        returnValue->events = 0;
+        return -1;
+    }
 }

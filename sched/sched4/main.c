@@ -255,7 +255,7 @@ void task_stress(tid_t const tid) {
             
             // create new task but do not automatically start the tasck
             
-            printf("stress connect %d\n", i++);
+            printf("stress connect %d\n", i);
             
             tid_t const tid = new_task_sched(THIS_SCHED, 
                                              (taskFunc_t) task_connect, 

@@ -22,7 +22,6 @@
  * Created on 18 ottobre 2014
  */
 
-#include "simplemalloc.h"
 #include "task.h"
 #include "taskev.h"
 
@@ -156,7 +155,8 @@ void task_listen(tid_t const tid)
           // create new task but do not automatically start the tasck
           tid_t const tid = new_task_sched(THIS_SCHED, 
                                            (taskFunc_t) task_socket, 
-                                           TASK_CREATE_NOT_READY);  
+                                           TASK_CREATE_NOT_READY, 
+                                           0 /* DEFAULT STACK SIZE */);  
           
           // create and set data (socket) to send to the task
           evutil_socket_t * const pTmp = (evutil_socket_t *)malloc(sizeof(evutil_socket_t));
@@ -259,7 +259,8 @@ void task_stress(tid_t const tid) {
             
             tid_t const tid = new_task_sched(THIS_SCHED, 
                                              (taskFunc_t) task_connect, 
-                                             TASK_NONE);  
+                                             TASK_NONE,
+                                             0 /* DEFAULT STACK SIZE */);  
             
             printf("stress created connect %d %u\n", i++, tid);
     
@@ -349,27 +350,25 @@ void task_signal(tid_t const tid) {
  * @return 
  */
 int main(int argc, char *argv[])
-{
-    simple_compact(10);  // preallocate stack
-    
+{   
     printf("Create Scheduler\n");
     // create a new cooperative scheduler
     sched_t *sched = create_sched(SCHED_NONE || SCHED_END_WITHOUT_TASKS);
     
     printf("Create Signal Task\n");
-    new_task_sched(sched, (taskFunc_t) task_signal, TASK_NONE);
+    new_task_sched(sched, (taskFunc_t) task_signal, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
 
     printf("Create Listening Task\n");
-    new_task_sched(sched, (taskFunc_t) task_listen, TASK_NONE);
+    new_task_sched(sched, (taskFunc_t) task_listen, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
     
     printf("Create Counter Task\n");
-    new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE);
+    new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE, 4096 /* STACK SIZE */);
     
     printf("Create Connect Task\n");
-    new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE);    
+    new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE, 0 /* DEFAULT STACK SIZE */);    
     
     printf("Create Stress Task\n");
-    new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE);    
+    new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE, 0 /* DEFAULT STACK SIZE */);    
 
     printf("Start Mainloop\n");
     // start scheduler
@@ -383,4 +382,3 @@ int main(int argc, char *argv[])
 
     return 0;
 }
-

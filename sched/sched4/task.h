@@ -80,20 +80,21 @@ typedef enum taskStatus {
 /** task data type
  */
 struct task {
-    tid_t tid;                 /**< unique thread identifier */
-    taskStatus_t status;       /**< task status */
-    int returnValue;           /**< return value valid if status == TERMINATED 
-                                */
-    taskFunc_t taskFunc;       /**< pointer to the task function */
-    sched_t *sched;            /**< scheduler that manage this task */
-    ucontext_t tempData;       /**< structure to save task data when interrupted 
-                                */
-    void * data;               /** taskParameter
-                                 */
-    void *stack;               /**< task stack */
+    tid_t tid;                    /**< unique thread identifier */
+    taskStatus_t status;          /**< task status */
+    int returnValue;              /**< return value valid if status == TERMINATED 
+                                   */
+    taskFunc_t taskFunc;          /**< pointer to the task function */
+    sched_t *sched;               /**< scheduler that manage this task */
+    ucontext_t tempData;          /**< structure to save task data when interrupted 
+                                   */
+    void * data;                  /** taskParameter
+                                   */
     
     unsigned int config;          /**< configuration */
     unsigned int stop;            /**< true if ask to close */
+    enum { T_DYNAMIC, T_STATIC } memory; /**< if STATIC memory will be not free on destroy */ 
+    uint8_t stack[0];                  /**< task stack */
 };
 
 typedef struct queueTask queueTask_t; /**< task queue type */
@@ -148,7 +149,8 @@ void destroy_sched(sched_t ** const sched);
 
 tid_t new_task_sched(sched_t * const sched, 
                      taskFunc_t ltaskFunc, 
-                     unsigned int config);
+                     unsigned int config,
+                     size_t stacksize);
 
 void mainloop_sched(sched_t * const sched);
 

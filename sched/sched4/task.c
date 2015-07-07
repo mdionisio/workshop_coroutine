@@ -36,9 +36,6 @@
 
 #include <stdlib.h>
 
-// used to allocate stask
-#include "simplemalloc.h"
-
 //used for list and map management
 #include <utlist.h>
 #include <uthash.h>
@@ -160,15 +157,32 @@ pthread_mutex_t gMutexAvailableTask = PTHREAD_MUTEX_INITIALIZER;
  * 
  * @param ltaskFunc function pointer to the function to call
  * @param lsched scheduler that is managing this task
+ * @param config
+ * @param memory if not NULL is the memory used to contain the task info and stacks
+ * @param stacksize if memory is NULL this is the size of the STACK. if 0 default size will be used
+ *                  if memory is not NULL is the size of the memory
  * @return return a valid task
  */
 static task_t * create_task(taskFunc_t ltaskFunc, 
                             sched_t * const lsched,
-                            unsigned int config)
+                            unsigned int config, void *memory, size_t stacksize)
 {
     assert(NULL != ltaskFunc);
     assert(NULL != lsched);
-    task_t * const task = (task_t *) malloc(sizeof (task_t));
+    task_t * task = NULL; 
+    if (memory == NULL) {
+        if (stacksize == 0) {
+            stacksize = SIGSTKSZ;
+        }
+        memory = malloc( sizeof (task_t) + stacksize );
+        task = (task_t *) memory;
+        task->memory = T_DYNAMIC;
+    } else {
+        task = (task_t *) memory;
+        task->memory = T_STATIC;
+        assert(stacksize > sizeof (task_t));
+        stacksize -= sizeof (task_t);
+    }
     LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
     task->tid = ++gTaskId;                 // set unique id
     UNLOCK_AVAILABLE_TASK;                 // safe access to gAvailableTask
@@ -179,8 +193,8 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     task->data = NULL;                     // in data for thread
     task->stop = 0;                        // set request to stop to false
     task->config = config;                 // set configuration
-    task->stack = simple_malloc();         // allocate stack
-    assert(NULL != task->stack);
+    //task->stack = allocate stack
+    //assert(NULL != task->stack);
 
     // initialize takein it from what is running now
     if (getcontext(&(task->tempData)) == -1) {
@@ -191,7 +205,7 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     task->tempData.uc_link          = &(task->sched->tempData);
     // initialize where to save the stask
     task->tempData.uc_stack.ss_sp   = task->stack;
-    task->tempData.uc_stack.ss_size = simple_sizeof(task->stack);
+    task->tempData.uc_stack.ss_size = stacksize;
     sigfillset(&(task->tempData.uc_sigmask));  // is used to store the set of signals blocked in the context
 
     makecontext(&(task->tempData), (void (*)(void)) ltaskFunc, 1, task->tid);
@@ -253,8 +267,9 @@ static void destroy_task(task_t ** const task)
             free((*task)->data);
             (*task)->data = NULL;
         }
-        simple_free(&((*task)->stack));
-        free(*task);
+        if ((*task)->memory == T_DYNAMIC) {
+            free(*task);
+        }
         *task = NULL;
     }
 }
@@ -430,15 +445,16 @@ void schedule_task(task_t * const task)
  * @param sched scheduler
  * @param ltaskFunc function fointer to the task function
  * @param config task config
+ * @param stacksize stacksize (0 means default)
  */
 tid_t new_task_sched(sched_t * const sched, 
                      taskFunc_t ltaskFunc, 
-                     unsigned int config)
+                     unsigned int config, size_t stacksize)
 {
     assert(NULL != sched);
     assert(NULL != ltaskFunc);
     // create new element for available map
-    mapTask_t * const newTask = create_mapTask(create_task(ltaskFunc, sched, config));
+    mapTask_t * const newTask = create_mapTask(create_task(ltaskFunc, sched, config, NULL, stacksize));
     //
     LOG("-> newtask ttid=%u\n", newTask->tid);
     

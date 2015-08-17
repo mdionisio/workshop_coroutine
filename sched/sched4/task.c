@@ -28,7 +28,7 @@
 
 #ifdef DEBUG_SCHED_TASK
 #include <stdio.h>
-#define LOG printf
+#define LOG(format, ...) printf("%s:%d (%s) " format, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__ )
 #else
 #define LOG(...)
 #endif

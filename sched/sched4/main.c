@@ -37,6 +37,18 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Log Macro
+
+#ifndef __FILENAME__
+#define __FILENAME__ "undefined"
+#endif
+
+#define BEGINLOG() printf("%s:%d (%s) ", __FILENAME__, __LINE__, __FUNCTION__)
+#define SIMPLELOG(format, ...) printf(format, ##__VA_ARGS__ )
+#define ENDLOG() printf("\n")
+#define LOG(format, ...) BEGINLOG(); SIMPLELOG(format, ##__VA_ARGS__); ENDLOG();
+
+////////////////////////////////////////////////////////////////////////////////
 
 
 
@@ -69,26 +81,27 @@ checkreturn:            // label to mark check returned value
         switch(retval.type) {
             case READ:
                 if (datalen>0) {
-                    printf("receive %d data:\n", datalen);
+                    LOG("receive %d data:", datalen);
+                    BEGINLOG();
                     for (i=0; i<datalen; i++) {
                         if (isprint(readingBuffer[i])) {
-                            printf("%c", (char)readingBuffer[i]);
+                            SIMPLELOG("%c", (char)readingBuffer[i]);
                         } else {
-                            printf("\\x%02x", (int)readingBuffer[i]);
+                            SIMPLELOG("\\x%02x", (int)readingBuffer[i]);
                         }
                     }
-                    printf("\n");
+                    ENDLOG();
                     
                     RESET_SOCKET_RETVAL(retval);
                     YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
                     goto checkreturn; // goto check feedback
                 } else { // there is something strange
-                    printf("no data to read any more \n");
+                    LOG("no data to read any more");
                     running = 0;
                 }
                 break;
             case WRITE:
-                printf("data write\n");
+                LOG("data write");
                 break;
             case EVENT:
                 if (retval.events & BEV_EVENT_ERROR) {
@@ -99,7 +112,7 @@ checkreturn:            // label to mark check returned value
                 }
                 break;
             case UNKONWN:
-                printf("operation canceled %s\n", __func__);
+                LOG("operation canceled");
                 running = 0;
                 break;
         }
@@ -108,7 +121,7 @@ checkreturn:            // label to mark check returned value
     
     bufferevent_free(bev);
     
-    printf("end %s\n", __func__);
+    LOG("end");
 
     RETURN_TASK(2);
 }
@@ -140,8 +153,8 @@ void task_listen(tid_t const tid)
 				       (struct sockaddr *) &sin, sizeof(sin));
     
     if (!listener) {
-	perror("Couldn't create listener\n");
-	RETURN_TASK(1);
+        perror("Couldn't create listener\n");
+        RETURN_TASK(1);
     }
     
     DEF_LISTEN_RETVAL(returnValue);
@@ -150,7 +163,7 @@ void task_listen(tid_t const tid)
     while (running && !ISSTOPREQUESTTASK) {
       if (YIELD_EVACCEPT(listener, returnValue) > 0) { // task wakeup because something received
         if (returnValue.isError == 0) {                // if there is no error
-          printf("connection accepted, create new task to manage connection\n");
+          LOG("connection accepted, create new task to manage connection");
           
           // create new task but do not automatically start the tasck
           tid_t const tid = new_task_sched(THIS_SCHED, 
@@ -174,7 +187,7 @@ void task_listen(tid_t const tid)
           running = 0;
         }
       } else {                                         // task wakeup for other reason
-        printf("operation canceled %s\n", __func__);
+        LOG("operation canceled");
         running = 0;
       }
       RESET_LISTEN_RETVAL(returnValue);
@@ -183,7 +196,7 @@ void task_listen(tid_t const tid)
     evconnlistener_free(listener);
     listener = NULL;
     
-    printf("end %s\n", __func__);
+    LOG("end");
 
     RETURN_TASK(0);
 }
@@ -198,7 +211,7 @@ void task_connect(tid_t const tid)
     
     DEF_SOCKET_RETVAL(retval);
     
-    printf("start %s\n", __func__);
+    LOG("start");
     
     struct bufferevent *bev;
     int datalen;
@@ -207,7 +220,7 @@ void task_connect(tid_t const tid)
     bev = bufferevent_socket_new(THIS_SCHED->base, -1, BEV_OPT_CLOSE_ON_FREE);
     
     if ( YIELD_EVSOCKET_CONNECT(bev, NULL, AF_UNSPEC, "127.0.0.1", 1234, retval) == 0 ) {
-        printf("connected %s\n", __func__);
+        LOG("connected");
         RESET_SOCKET_RETVAL(retval);
         YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
         // wait answer
@@ -215,23 +228,24 @@ void task_connect(tid_t const tid)
         datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
         
         if (datalen>0) {
-            printf("Stress receive %d data:\n", datalen);
+            LOG("Stress receive %d data:", datalen);
+            BEGINLOG();
             for (int i=0; i<datalen; i++) {
                 if (isprint(readingBuffer[i])) {
-                    printf("%c", (char)readingBuffer[i]);
+                    SIMPLELOG("%c", (char)readingBuffer[i]);
                 } else {
-                    printf("\\x%02x", (int)readingBuffer[i]);
+                    SIMPLELOG("\\x%02x", (int)readingBuffer[i]);
                 }
             }
-            printf("\n");
+            ENDLOG();
         }
     } else {
-        printf("error connecting %s\n", __func__);
+        LOG("error connecting");
     }
     
     bufferevent_free(bev);
     
-    printf("end %s\n", __func__);
+    LOG("end");
 
     RETURN_TASK(0);
 }
@@ -255,23 +269,23 @@ void task_stress(tid_t const tid) {
             
             // create new task but do not automatically start the tasck
             
-            printf("stress connect %d\n", i);
+            LOG("stress connect %d", i);
             
             tid_t const tid = new_task_sched(THIS_SCHED, 
                                              (taskFunc_t) task_connect, 
                                              TASK_NONE,
                                              0 /* DEFAULT STACK SIZE */);  
             
-            printf("stress created connect %d %u\n", i++, tid);
+            LOG("stress created connect %d %u", i++, tid);
     
             
         } else {                        // task wakeup for other reason
-            printf("operation canceled %s\n", __func__);
+            LOG("operation canceled");
             running = 0;
         }
     } // end while
     
-    printf("end %s\n", __func__);
+    LOG("end");
     RETURN_TASK(0);
 }
 
@@ -305,14 +319,14 @@ void task_counter(tid_t const tid) {
             elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
             elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
     
-            printf("counter %d (%lf ms)\n", i++, elapsedTime);
+            LOG("counter %d (%lf ms)", i++, elapsedTime);
         } else {                        // task wakeup for other reason
-            printf("operation canceled %s\n", __func__);
+            LOG("operation canceled");
             running = 0;
         }
     } // end while
     
-    printf("end %s\n", __func__);
+    LOG("end");
     RETURN_TASK(0);
 }
 
@@ -326,18 +340,18 @@ void task_signal(tid_t const tid) {
     int running = 1;
     while (running && !ISSTOPREQUESTTASK) {        
         if (YIELD_EVSIGNAL(SIGINT)) { // task wakeup for signal received
-            printf("signal received\n");
+            LOG("signal received");
             // iter over all Scheduled task and mark it to be stopped
             iterSchedTask(stopRequest_task, THIS_SCHED);
             // iter over all Scheduled task and wakeup it
             iterSchedTask(schedule_task, THIS_SCHED);
         } else {                      // task wakeup for other reason
-            printf("operation canceled %s\n", __func__);
+            LOG("operation canceled");
             running = 0;
         }
     } // end while
     
-    printf("end %s\n", __func__);
+    LOG("end");
     RETURN_TASK(0);
 }
 
@@ -351,34 +365,34 @@ void task_signal(tid_t const tid) {
  */
 int main(int argc, char *argv[])
 {   
-    printf("Create Scheduler\n");
+    LOG("Create Scheduler");
     // create a new cooperative scheduler
     sched_t *sched = create_sched(SCHED_NONE || SCHED_END_WITHOUT_TASKS);
     
-    printf("Create Signal Task\n");
+    LOG("Create Signal Task");
     new_task_sched(sched, (taskFunc_t) task_signal, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
 
-    printf("Create Listening Task\n");
+    LOG("Create Listening Task");
     new_task_sched(sched, (taskFunc_t) task_listen, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
     
-    printf("Create Counter Task\n");
-    new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE, 4096 /* STACK SIZE */);
+    LOG("Create Counter Task");
+    new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE, 0 /* STACK SIZE */);
     
-    printf("Create Connect Task\n");
+    LOG("Create Connect Task");
     new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE, 0 /* DEFAULT STACK SIZE */);    
     
-    printf("Create Stress Task\n");
+    LOG("Create Stress Task");
     new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE, 0 /* DEFAULT STACK SIZE */);    
 
-    printf("Start Mainloop\n");
+    LOG("Start Mainloop");
     // start scheduler
     mainloop_sched(sched);
 
-    printf("Destroy Scheduler\n");
+    LOG("Destroy Scheduler");
     // scheduling is terminated so the scheduler can be detroyed
     destroy_sched(&sched);
     
-    printf("mainloop terminated\n");
+    LOG("mainloop terminated");
 
     return 0;
 }

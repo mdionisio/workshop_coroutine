@@ -42,6 +42,7 @@ bool indata(int *data);
  * 
  */
 void producer() {
+    printf("--> producer start .\n");
     int i;
     for (i=0; i<10; i++) {
         printf("--> produced %d\n", i);
@@ -49,7 +50,7 @@ void producer() {
     }
     outdata(0, false);
     // never reach this point
-    printf("--> you don't see it\n");
+    printf("--> producer end .you don't see it\n");
 }
 
 /** Consume all the data available
@@ -57,10 +58,12 @@ void producer() {
  */
 void consumer() {
     int data;
+    printf("--> consumer start .\n");
     // while there is data
     while (indata(&data)) {
         printf("<-- consumed %d\n", data);
     }
+    printf("--> consumer end .\n");
 }
 
 // NOW we start the magic code ...
@@ -81,21 +84,24 @@ void outdata(int data, bool eof) {
     hereForCallProducer = true;
     tmpData = data;
     tmpEof = eof;
+    printf("--> save producer context \n");
     if (getcontext(&contextProducer) == -1) {
         printf("getcontext error (%d): %s\n", errno, strerror(errno));
     }
     contextProducerValid = true;
     if (contextConsumerValid && hereForCallProducer) {
         hereForCallContumer = false;
+        printf("--> goto consumer context \n");
         setcontext(&contextConsumer);
     }
 }
 
 bool indata(int *data) {
-    hereForCallContumer = true;                  // set a flag to marck
+    hereForCallContumer = true;                  // set a flag to mark
                                                  // that we are here because we 
                                                  // have call the function
     // save context
+    printf("--> save consumer context \n");
     if (getcontext(&contextConsumer) == -1) {
         printf("getcontext error (%d): %s\n", errno, strerror(errno));
     }
@@ -104,18 +110,23 @@ bool indata(int *data) {
     // if it is the first time that we call indata
     // we have to start producer
     if (!contextProducerValid && hereForCallContumer) {
+        printf("--> producer is not started, start \n");
         producer();  // start producer
         // never reach this point
         printf("--> you don't see it\n");
     }
     
-    // if we are here because we have call the functio we switch to producer 
+    // if we are here because we have call the function we switch to producer 
     // so we ask to poll data
     if (contextProducerValid && hereForCallContumer) {
         hereForCallProducer = false;
+        printf("--> goto saved producer context \n");
         setcontext(&contextProducer);
+        printf("--> you don't see it\n");
+        return (0);
     } else {
         // otherwise the data is pulled and we consume it
+        printf("--> data pulled\n");
         *data = tmpData;
         return tmpEof;
     }

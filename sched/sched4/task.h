@@ -24,6 +24,11 @@
 
 #ifndef __TASK_H__
 #define __TASK_H__
+
+#ifdef	__cplusplus
+extern "C" {
+#endif
+    
 // if you build with -std=c99 you need the following header
 // otherwise ucontext.h will be different
 // if you uild with -std=gnu99 everything is ok
@@ -178,4 +183,8 @@ typedef void (*iterOnTask)(task_t * const task);
 void iterAllTask(iterOnTask f);
 void iterSchedTask(iterOnTask f, const sched_t * const sched);
 
+#ifdef	__cplusplus
+}
 #endif
+
+#endif /* __TASK_H__ */

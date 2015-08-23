@@ -25,6 +25,10 @@
 #ifndef __TASKEV_H__
 #define __TASKEV_H__
 
+#ifdef	__cplusplus
+extern "C" {
+#endif
+
 #include "task.h"
 
 #include <event2/event.h>
@@ -90,5 +94,8 @@ void wakeup_immediate(tid_t tid);
 
 #endif
 
-
+#ifdef	__cplusplus
+}
 #endif
+
+#endif /* __TASKEV_H__ */

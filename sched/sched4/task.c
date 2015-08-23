@@ -26,13 +26,20 @@
 
 #include <assert.h>
 
-#ifdef DEBUG_SCHED_TASK
-#include <stdio.h>
-#define LOG(format, ...) printf("%s:%d (%s) " format, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__ )
-#else
-#define LOG(...)
+////////////////////////////////////////////////////////////////////////////////
+#ifndef DEBUG_SCHED_TASK
+#define FAKELOG
 #endif
 
+/// Log Macro
+
+#ifndef __FILENAME__
+#define __FILENAME__ "task.c"
+#endif
+
+#include "logmacro.h"
+
+////////////////////////////////////////////////////////////////////////////////
 
 #include <stdlib.h>
 
@@ -61,7 +68,7 @@
         (head)->prev->next = (head);                                           \
       }                                                                        \
       (out)->prev = (out);                                                     \
-      (out)->next = (out);                                                        \
+      (out)->next = (out);                                                     \
     } else {                                                                   \
       (out) = NULL;                                                            \
     }                                                                          \
@@ -112,6 +119,9 @@ struct mapTask {
 
 static mapTask_t * create_mapTask(task_t * const task) {
     mapTask_t * const newTask = (mapTask_t *) malloc(sizeof(mapTask_t));
+    
+    assert(NULL != newTask);
+    
     newTask->task = task;
     newTask->tid = task->tid;
     newTask->listWaiting = NULL;
@@ -140,13 +150,16 @@ static void destroy_mapTask(mapTask_t ** const delTask) {
 static mapSched_t *gMapSched = NULL;     /**< define map for all available scheduler */
 static mapTask_t *gAvailableTask = NULL; /**< define map for all available task */
 #ifdef THREADSAFE_SCHED
-pthread_mutex_t gMutexAvailableTask = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t gMutexAvailableTask = PTHREAD_MUTEX_INITIALIZER;
 #define LOCK_AVAILABLE_TASK pthread_mutex_lock(&gMutexAvailableTask)
 #define UNLOCK_AVAILABLE_TASK pthread_mutex_unlock(&gMutexAvailableTask)
 #else
 #define LOCK_AVAILABLE_TASK 
 #define UNLOCK_AVAILABLE_TASK 
 #endif
+
+#define TASKMALLOC malloc
+#define TASKFREE free
 
 
 // *****************************************************************************
@@ -174,7 +187,10 @@ static task_t * create_task(taskFunc_t ltaskFunc,
         if (stacksize == 0) {
             stacksize = SIGSTKSZ;
         }
-        memory = malloc( sizeof (task_t) + stacksize );
+        memory = TASKMALLOC( sizeof (task_t) + stacksize );
+        
+        assert(NULL != memory);
+        
         task = (task_t *) memory;
         task->memory = T_DYNAMIC;
     } else {
@@ -193,8 +209,6 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     task->data = NULL;                     // in data for thread
     task->stop = 0;                        // set request to stop to false
     task->config = config;                 // set configuration
-    //task->stack = allocate stack
-    //assert(NULL != task->stack);
 
     // initialize takein it from what is running now
     if (getcontext(&(task->tempData)) == -1) {
@@ -232,6 +246,7 @@ void setReturnValue_task(task_t * const task, int value)
 static void run_task(task_t * const task)
 {
     assert(NULL != task);
+    assert(NULL != task->sched);
     LOG("run_task tid=%u %d\n", task->tid, task->status);
 
     switch(task->status) {
@@ -268,7 +283,7 @@ static void destroy_task(task_t ** const task)
             (*task)->data = NULL;
         }
         if ((*task)->memory == T_DYNAMIC) {
-            free(*task);
+            TASKFREE(*task);
         }
         *task = NULL;
     }
@@ -281,6 +296,7 @@ static void destroy_task(task_t ** const task)
 void yield_task(task_t * const task)
 {
     assert(NULL != task);
+    assert(NULL != task->sched);
     task->status = WAIT;
     if (swapcontext(&(task->tempData), &(task->sched->tempData)) == -1) {
         LOG("yield swapcontext error (%d): %s\n", errno, strerror(errno));
@@ -304,6 +320,9 @@ void wait_task(task_t * const task, tid_t tid)
     assert(NULL != __mapTask__);
 
     elemTaskList_t * const newWaitCond = (elemTaskList_t *) malloc(sizeof (elemTaskList_t));
+    
+    assert(NULL != newWaitCond);
+    
     newWaitCond->next = NULL;
     newWaitCond->task = task;
     LL_PREPEND(__mapTask__->listWaiting, newWaitCond);
@@ -320,6 +339,7 @@ void wait_task(task_t * const task, tid_t tid)
 void suspend_task(task_t * const task)
 {
     assert(NULL != task);
+    assert(NULL != task->sched);
     task->status = SUSPENDED;
     if (swapcontext(&(task->tempData), &(task->sched->tempData)) == -1) {
         LOG("yield swapcontext error (%d): %s\n", errno, strerror(errno));
@@ -349,12 +369,20 @@ static int lib_event_initialized = 0;
 sched_t * create_sched(unsigned int config)
 {
     sched_t * const sched = (sched_t *) malloc(sizeof (sched_t));
+    assert(NULL != sched);
+    
+    mapSched_t * const newSched = (mapSched_t *) malloc(sizeof (mapSched_t));
+    assert(NULL != newSched);
+    
+    struct event_base * const ev_base_event = event_base_new();
+    assert( NULL != ev_base_event );
+    
     LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
-    sched->sid = ++gSchedId;                            // set scheduler id
-    sched->numAvailableTask = 0;                        // set no available task
-    sched->readyTask = NULL;                            // set empty list
-    sched->config = config;                             // configure scheduler
-    sched->stop = 0;                                    // set stop to don't stop
+    sched->sid = ++gSchedId;               // set scheduler id
+    sched->numAvailableTask = 0;           // set no available task
+    sched->readyTask = NULL;               // set empty list
+    sched->config = config;                // configure scheduler
+    sched->stop = 0;                       // set stop to don't stop
     
     if (lib_event_initialized == 0) {
 #ifdef THREADSAFE_SCHED
@@ -368,9 +396,8 @@ sched_t * create_sched(unsigned int config)
     }
         
     sched->base = event_base_new();
-    assert( NULL != sched->base );
+    assert( ev_base_event );
     
-    mapSched_t * const newSched = (mapSched_t *) malloc(sizeof (mapSched_t));
     newSched->sid = sched->sid;
     newSched->sched = sched;
     HASH_ADD_INT(gMapSched, sched->sid, newSched);
@@ -425,19 +452,29 @@ void schedule_task(task_t * const task)
         return;
     }
     
-    queueTask_t * elIter = NULL;    
-    CDL_FOREACH(task->sched->readyTask, elIter) {
-        if (elIter->task == task) {
-            return ;                     // task already in the ready list
+    if (task->sched != NULL) { // if exist scheduler check if the task is already 
+                               // plan  to be scheduled. 
+                               // In that case nothing has to be done
+        queueTask_t * elIter = NULL;    
+        CDL_FOREACH(task->sched->readyTask, elIter) {
+            if (elIter->task == task) {
+                return ;                     // task already in the ready list
+            }
         }
     }
     
     task->status = WAIT;
     // create new element for ready list
     queueTask_t * const newElem = (queueTask_t *) malloc(sizeof (queueTask_t));
+    
+    assert(NULL != newElem);
+    
     newElem->task = task;
-    // add task to the ready list
-    CDL_PREPEND(task->sched->readyTask, newElem);
+    
+    if (task->sched != NULL) {
+        // add task to the ready list
+        CDL_PREPEND(task->sched->readyTask, newElem);
+    }
 }
 
 /** Create a new schedulable task
@@ -455,6 +492,8 @@ tid_t new_task_sched(sched_t * const sched,
     assert(NULL != ltaskFunc);
     // create new element for available map
     mapTask_t * const newTask = create_mapTask(create_task(ltaskFunc, sched, config, NULL, stacksize));
+    assert(NULL != newTask);
+    
     //
     LOG("-> newtask ttid=%u\n", newTask->tid);
     
@@ -500,6 +539,7 @@ void mainloop_sched(sched_t * const sched)
             // libevent task dispaching        
 	    event_base_loop(sched->base, EVLOOP_ONCE /* EVLOOP_NONBLOCK */);
         } else { // there is a task that can be scheduled
+            assert(NULL != task->task);
             LOG("scheduler work on task ttid=%u status=%d\n",
                    task->task->tid, task->task->status);
             int wakeup = 0;

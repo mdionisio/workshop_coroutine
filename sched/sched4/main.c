@@ -34,19 +34,17 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <assert.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Log Macro
 
 #ifndef __FILENAME__
-#define __FILENAME__ "undefined"
+#define __FILENAME__ "main.c"
 #endif
 
-#define BEGINLOG() printf("%s:%d (%s) ", __FILENAME__, __LINE__, __FUNCTION__)
-#define SIMPLELOG(format, ...) printf(format, ##__VA_ARGS__ )
-#define ENDLOG() printf("\n")
-#define LOG(format, ...) BEGINLOG(); SIMPLELOG(format, ##__VA_ARGS__); ENDLOG();
+#include "logmacro.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -368,6 +366,7 @@ int main(int argc, char *argv[])
     LOG("Create Scheduler");
     // create a new cooperative scheduler
     sched_t *sched = create_sched(SCHED_NONE || SCHED_END_WITHOUT_TASKS);
+    assert(NULL != sched);
     
     LOG("Create Signal Task");
     new_task_sched(sched, (taskFunc_t) task_signal, TASK_NONE, 0 /* DEFAULT STACK SIZE */);

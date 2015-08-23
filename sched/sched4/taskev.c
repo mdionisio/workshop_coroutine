@@ -51,6 +51,8 @@ signal_cb(evutil_socket_t fd, short event, void *arg)
 
 int yield_signal_ev(task_t * const task, const short signal) {
     assert( NULL != task );
+    assert( NULL != task->sched );
+    assert( NULL != task->sched->base );
     struct event *ev = NULL;
     signal_t arg;
     
@@ -60,6 +62,7 @@ int yield_signal_ev(task_t * const task, const short signal) {
 
     /* call sighup_function on a HUP signal */
     ev = evsignal_new(task->sched->base, signal, signal_cb, &arg);
+    assert( NULL != ev );
     
     event_add(ev, NULL);      
     
@@ -81,6 +84,7 @@ typedef struct timeoutinfo {
 static void ev_timeout_cb(evutil_socket_t fd, short what, void *arg) {
     timeout_t * const timeout = (timeout_t*)arg;
     assert( NULL != timeout );
+    assert( NULL != timeout->task );
     
     timeout->event = what;
     schedule_task(timeout->task);
@@ -98,7 +102,9 @@ int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
                                     -1,                
                                     EV_TIMEOUT,        
                                     ev_timeout_cb,     
-                                    &arg);        
+                                    &arg);
+    assert( NULL != ev );
+    
     event_add(ev, time);      
     
     suspend_task(task);  // task suspend;
@@ -139,13 +145,14 @@ void wakeup_immediate(tid_t tid) {
     task_t * task = getTask(tid);
     if (task != NULL) {
         struct callback_param * param = (struct callback_param *) malloc(sizeof(struct callback_param));
-
+        assert(NULL != param);
 
         struct event * ev = event_new(  task->sched->base,       
                                         -1,                
                                         EV_TIMEOUT,        
                                         ev_timeout_cb_thread,     
                                         param); 
+        assert(NULL != ev);
 
         param->tid = tid;
         param->ev = ev;

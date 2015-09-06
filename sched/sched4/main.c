@@ -72,7 +72,7 @@ void task_socket(tid_t const tid)
     
     int running = 1;
 
-    while (running && !ISSTOPREQUESTTASK) {
+    while ((NULL != bev) && running && !ISSTOPREQUESTTASK) {
         datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
         
 checkreturn:            // label to mark check returned value
@@ -117,7 +117,10 @@ checkreturn:            // label to mark check returned value
         RESET_SOCKET_RETVAL(retval);
     } // end while
     
-    bufferevent_free(bev);
+    if (NULL != bev) { 
+        bufferevent_free(bev); 
+        bev = NULL;
+    }
     
     LOG("end");
 
@@ -135,7 +138,6 @@ void task_listen(tid_t const tid)
 {
     INIT_TASK;
     
-    struct evconnlistener *listener;
     struct sockaddr_in sin;
 
     /* Clear the sockaddr before using it, in case there are extra
@@ -146,7 +148,7 @@ void task_listen(tid_t const tid)
     sin.sin_port = htons(1234);
     
     /* Create a new listener */
-    listener = evconnlistener_new_bind(THIS_SCHED->base, NULL, NULL,
+    struct evconnlistener *listener = evconnlistener_new_bind(THIS_SCHED->base, NULL, NULL,
 				       LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, -1,
 				       (struct sockaddr *) &sin, sizeof(sin));
     
@@ -211,21 +213,19 @@ void task_connect(tid_t const tid)
     
     LOG("start");
     
-    struct bufferevent *bev;
-    int datalen;
-    uint8_t readingBuffer[1024];
-
-    bev = bufferevent_socket_new(THIS_SCHED->base, -1, BEV_OPT_CLOSE_ON_FREE);
+    struct bufferevent *bev = bufferevent_socket_new(THIS_SCHED->base, -1, BEV_OPT_CLOSE_ON_FREE);
     
-    if ( YIELD_EVSOCKET_CONNECT(bev, NULL, AF_UNSPEC, "127.0.0.1", 1234, retval) == 0 ) {
+    if ( (NULL != bev) && YIELD_EVSOCKET_CONNECT(bev, NULL, AF_UNSPEC, "127.0.0.1", 1234, retval) == 0 ) {
         LOG("connected");
         RESET_SOCKET_RETVAL(retval);
         YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
         // wait answer
         RESET_SOCKET_RETVAL(retval);
-        datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
         
-        if (datalen>0) {
+        uint8_t readingBuffer[1024];
+        int datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
+        
+        if (datalen > 0) {
             LOG("Stress receive %d data:", datalen);
             BEGINLOG();
             for (int i=0; i<datalen; i++) {
@@ -241,7 +241,10 @@ void task_connect(tid_t const tid)
         LOG("error connecting");
     }
     
-    bufferevent_free(bev);
+    if (bev) { 
+        bufferevent_free(bev);
+        bev = NULL;
+    }
     
     LOG("end");
 

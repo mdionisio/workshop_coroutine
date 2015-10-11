@@ -70,6 +70,7 @@ int yield_signal_ev(task_t * const task, const short signal) {
     
     event_del(ev);                                         
     event_free(ev);  
+    ev = NULL;
     
     return (int)arg.event;
 }
@@ -113,6 +114,7 @@ int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
     
     event_del(ev);                                         
     event_free(ev);  
+    ev = NULL;
     
     return (int)arg.event;
 }
@@ -146,7 +148,7 @@ void wakeup_immediate(tid_t tid) {
     
     task_t * task = getTask(tid);
     if (task != NULL) {
-        struct callback_param * param = (struct callback_param *) malloc(sizeof(struct callback_param));
+        struct callback_param * const param = (struct callback_param *) malloc(sizeof(struct callback_param));
         assert(NULL != param);
 
         struct event * ev = event_new(  task->sched->base,       
@@ -334,7 +336,7 @@ int yield_socket_ev_connect(task_t * const task,
     assert( NULL != task );
     init_socketReturn(returnValue, task);
     
-    bufferevent_setcb(bev, /* read */echo_read_cb, 
+    bufferevent_setcb(bev, /* read */ echo_read_cb, 
                            /* write */ echo_write_cb, 
                            /* event */ echo_event_cb, returnValue);
     bufferevent_enable(bev, EV_READ || EV_WRITE);

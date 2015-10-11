@@ -395,8 +395,7 @@ sched_t * create_sched(unsigned int config)
         lib_event_initialized = 1;
     }
 
-    sched->base = event_base_new();
-    assert( ev_base_event );
+    sched->base = ev_base_event;
 
     newSched->sid = sched->sid;
     newSched->sched = sched;

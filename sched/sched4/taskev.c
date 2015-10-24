@@ -23,6 +23,7 @@
  */
 
 #include "taskev.h"
+#include "unused.h"
 
 #include <assert.h>
 
@@ -40,7 +41,7 @@ typedef struct signalinfo {
 } signal_t;
 
 static void
-signal_cb(evutil_socket_t fd, short event, void *arg)
+signal_cb(evutil_socket_t UNUSED_PARAMETER(fd), short UNUSED_PARAMETER(event), void *arg)
 {
     signal_t * const signal = (signal_t *)arg;
     assert( NULL != signal );
@@ -82,7 +83,7 @@ typedef struct timeoutinfo {
     short event;
 } timeout_t;
 
-static void ev_timeout_cb(evutil_socket_t fd, short what, void *arg) {
+static void ev_timeout_cb(evutil_socket_t UNUSED_PARAMETER(fd), short what, void *arg) {
     timeout_t * const timeout = (timeout_t*)arg;
     assert( NULL != timeout );
     assert( NULL != timeout->task );
@@ -126,7 +127,7 @@ struct callback_param {
     tid_t tid;
 };
 
-static void ev_timeout_cb_thread(evutil_socket_t fd, short what, void *arg) {
+static void ev_timeout_cb_thread(evutil_socket_t UNUSED_PARAMETER(fd), short UNUSED_PARAMETER(what), void *arg) {
     struct callback_param * param = (struct callback_param*)arg;
     assert( NULL != param );
     assert( NULL != param->ev );
@@ -186,7 +187,7 @@ void reset_acceptReturn(acceptReturn_t *const retval) {
     retval->err = 0;
 }
 
-static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *address, int socklen, void *ctx)
+static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *address, int UNUSED_PARAMETER(socklen), void *ctx)
 {
     acceptReturn_t * const retval = (acceptReturn_t *) ctx;
     assert( NULL != retval );

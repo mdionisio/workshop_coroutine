@@ -133,6 +133,9 @@ static void destroy_task(task_t ** const task);
 static void destroy_mapTask(mapTask_t ** const delTask) {
     assert(NULL != delTask);
     if (NULL != *delTask) {
+        assert(NULL != (*delTask)->task);
+        assert(NULL != (*delTask)->task->sched);
+        
         elemTaskList_t *elIter = NULL;
         elemTaskList_t *elIterNext = NULL;
         LL_FOREACH_SAFE((*delTask)->listWaiting, elIter, elIterNext) {

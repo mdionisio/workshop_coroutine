@@ -36,6 +36,8 @@
 #include <errno.h>
 #include <assert.h>
 
+#include "unused.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Log Macro
@@ -364,7 +366,7 @@ void task_signal(tid_t const tid) {
  * @param argv
  * @return
  */
-int main(int argc, char *argv[])
+int main(int UNUSED_PARAMETER(argc), char ** UNUSED_PARAMETER(argv))
 {
     LOG("Create Scheduler");
     // create a new cooperative scheduler

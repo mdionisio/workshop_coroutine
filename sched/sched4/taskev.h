@@ -50,7 +50,6 @@ typedef struct acceptReturn {
   evutil_socket_t fd;
   int err;
   task_t * task;
-  struct evconnlistener *listener;
 } acceptReturn_t;
 
 void reset_acceptReturn(acceptReturn_t *const retval);

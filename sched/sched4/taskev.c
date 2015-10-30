@@ -178,7 +178,6 @@ static void init_acceptReturn(acceptReturn_t * const retval, struct evconnlisten
     retval->fd = -1;
     retval->err = 0;
     retval->task = task;
-    retval->listener = listener;
 }
 
 void reset_acceptReturn(acceptReturn_t *const retval) {
@@ -193,13 +192,15 @@ static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd, 
     assert( NULL != retval );
     assert( NULL != address );
     assert( NULL != listener );
+    assert( NULL != retval->task );
+    assert( 0 != fd );
     
     retval->isError = 0;
     retval->fd = fd;
     retval->err = 0;
     schedule_task(retval->task);
     // don't call any other callback on this
-    evconnlistener_disable(retval->listener);
+    evconnlistener_disable(listener);
     evconnlistener_set_cb(listener, NULL, NULL);
     evconnlistener_set_error_cb(listener, NULL);
 }
@@ -215,7 +216,7 @@ static void accept_error_cb(struct evconnlistener *listener, void *ctx)
     retval->err = EVUTIL_SOCKET_ERROR();
     schedule_task(retval->task);
     // don't call any other callback on this
-    evconnlistener_disable(retval->listener);
+    evconnlistener_disable(listener);
     evconnlistener_set_cb(listener, NULL, NULL);
     evconnlistener_set_error_cb(listener, NULL);
 }

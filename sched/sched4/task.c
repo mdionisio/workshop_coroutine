@@ -82,8 +82,8 @@
 // *                        TASK/SCHEDULER DEFINITION                          *
 // *****************************************************************************
 
-static tid_t gTaskId = 0;          /**< global variable to give unique id to any task */
-static tid_t gSchedId = 0;         /**< global variable to give unique id to any scheduler */
+static tid_t gTaskId = 0; /**< global variable to give unique id to any task */
+static tid_t gSchedId = 0; /**< global variable to give unique id to any scheduler */
 
 /** map type for from sid to sched
  */
@@ -92,16 +92,16 @@ typedef struct mapSched mapSched_t;
 /** map scheduler
  */
 struct mapSched {
-    sid_t sid;                  /**< map key */
-    sched_t * sched;            /**< map value */
-    UT_hash_handle hh;          /**< makes this structure hashable */
+    sid_t sid; /**< map key */
+    sched_t * sched; /**< map value */
+    UT_hash_handle hh; /**< makes this structure hashable */
 };
 
 typedef struct elemTaskList elemTaskList_t;
 
 struct elemTaskList {
-      task_t *task;
-      elemTaskList_t *next;
+    task_t *task;
+    elemTaskList_t *next;
 };
 
 /** map type for from tid to task
@@ -111,14 +111,14 @@ typedef struct mapTask mapTask_t;
 /** map data type for from tid to task
  */
 struct mapTask {
-    tid_t tid;                  /**< map key */
-    task_t * task;               /**< map value */
+    tid_t tid; /**< map key */
+    task_t * task; /**< map value */
     elemTaskList_t *listWaiting; /**< list of task waiting the task's end */
-    UT_hash_handle hh;          /**< makes this structure hashable */
+    UT_hash_handle hh; /**< makes this structure hashable */
 };
 
 static mapTask_t * create_mapTask(task_t * const task) {
-    mapTask_t * const newTask = (mapTask_t *) malloc(sizeof(mapTask_t));
+    mapTask_t * const newTask = (mapTask_t *) malloc(sizeof (mapTask_t));
 
     assert(NULL != newTask);
 
@@ -128,29 +128,30 @@ static mapTask_t * create_mapTask(task_t * const task) {
     return newTask;
 }
 
-static void destroy_task(task_t ** const task);
+static void destroy_task(task_t * * const task);
 
-static void destroy_mapTask(mapTask_t ** const delTask) {
+static void destroy_mapTask(mapTask_t * * const delTask) {
     assert(NULL != delTask);
     if (NULL != *delTask) {
         assert(NULL != (*delTask)->task);
         assert(NULL != (*delTask)->task->sched);
-        
+
         elemTaskList_t *elIter = NULL;
         elemTaskList_t *elIterNext = NULL;
+
         LL_FOREACH_SAFE((*delTask)->listWaiting, elIter, elIterNext) {
             schedule_task(elIter->task);
             LL_DELETE((*delTask)->listWaiting, elIter);
             free(elIter);
         }
-        --((*delTask)->task->sched->numAvailableTask);  // decrease task counter
-        destroy_task(&((*delTask)->task));              // destroy task
-        free(*delTask);                                 // release memory
+        --((*delTask)->task->sched->numAvailableTask); // decrease task counter
+        destroy_task(&((*delTask)->task)); // destroy task
+        free(*delTask); // release memory
         *delTask = NULL;
     }
 }
 
-static mapSched_t *gMapSched = NULL;     /**< define map for all available scheduler */
+static mapSched_t *gMapSched = NULL; /**< define map for all available scheduler */
 static mapTask_t *gAvailableTask = NULL; /**< define map for all available task */
 #ifdef THREADSAFE_SCHED
 static pthread_mutex_t gMutexAvailableTask = PTHREAD_MUTEX_INITIALIZER;
@@ -180,9 +181,8 @@ static pthread_mutex_t gMutexAvailableTask = PTHREAD_MUTEX_INITIALIZER;
  * @return return a valid task
  */
 static task_t * create_task(taskFunc_t ltaskFunc,
-                            sched_t * const lsched,
-                            unsigned int config, void *memory, size_t stacksize)
-{
+        sched_t * const lsched,
+        unsigned int config, void *memory, size_t stacksize) {
     assert(NULL != ltaskFunc);
     assert(NULL != lsched);
     task_t * task = NULL;
@@ -190,7 +190,7 @@ static task_t * create_task(taskFunc_t ltaskFunc,
         if (stacksize == 0) {
             stacksize = SIGSTKSZ;
         }
-        memory = TASKMALLOC( sizeof (task_t) + stacksize );
+        memory = TASKMALLOC(sizeof (task_t) + stacksize);
 
         assert(NULL != memory);
 
@@ -202,16 +202,16 @@ static task_t * create_task(taskFunc_t ltaskFunc,
         assert(stacksize > sizeof (task_t));
         stacksize -= sizeof (task_t);
     }
-    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
-    task->tid = ++gTaskId;                 // set unique id
-    UNLOCK_AVAILABLE_TASK;                 // safe access to gAvailableTask
-    task->taskFunc = ltaskFunc;            // set function pointer to call
-    task->status = WAIT;                   // set task status
-    task->returnValue = 0;                 // set default return value
-    task->sched = lsched;                  // set scheduler where the task run
-    task->data = NULL;                     // in data for thread
-    task->stop = 0;                        // set request to stop to false
-    task->config = config;                 // set configuration
+    LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
+    task->tid = ++gTaskId; // set unique id
+    UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
+    task->taskFunc = ltaskFunc; // set function pointer to call
+    task->status = WAIT; // set task status
+    task->returnValue = 0; // set default return value
+    task->sched = lsched; // set scheduler where the task run
+    task->data = NULL; // in data for thread
+    task->stop = 0; // set request to stop to false
+    task->config = config; // set configuration
 
     // initialize takein it from what is running now
     if (getcontext(&(task->tempData)) == -1) {
@@ -219,11 +219,11 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     }
 
     // set the context where to go at the end
-    task->tempData.uc_link          = &(task->sched->tempData);
+    task->tempData.uc_link = &(task->sched->tempData);
     // initialize where to save the stask
-    task->tempData.uc_stack.ss_sp   = task->stack;
+    task->tempData.uc_stack.ss_sp = task->stack;
     task->tempData.uc_stack.ss_size = stacksize;
-    sigfillset(&(task->tempData.uc_sigmask));  // is used to store the set of signals blocked in the context
+    sigfillset(&(task->tempData.uc_sigmask)); // is used to store the set of signals blocked in the context
 
     makecontext(&(task->tempData), (void (*)(void)) ltaskFunc, 1, task->tid);
 
@@ -235,8 +235,7 @@ static task_t * create_task(taskFunc_t ltaskFunc,
  * @param task
  * @param value
  */
-void setReturnValue_task(task_t * const task, int value)
-{
+void setReturnValue_task(task_t * const task, int value) {
     assert(NULL != task);
     task->returnValue = value;
     task->status = TERMINATED;
@@ -246,28 +245,27 @@ void setReturnValue_task(task_t * const task, int value)
  *
  * @param task
  */
-static void run_task(task_t * const task)
-{
+static void run_task(task_t * const task) {
     assert(NULL != task);
     assert(NULL != task->sched);
     LOG("run_task tid=%u %d\n", task->tid, task->status);
 
-    switch(task->status) {
-    case WAIT:
-        task->status = RUNNING;
-        if (swapcontext(&(task->sched->tempData), &(task->tempData)) == -1) {
-            LOG("swapcontext error (%d): %s\n", errno, strerror(errno));
-        }
-        break;
-    case RUNNING:
-        // if you reach this point means that the task is terminated without call
-        // setReturnValue_task. This is teorically a programming problem but it
-        // can be easy managed and so ...
-        LOG("missing setting of return value\n");
-        setReturnValue_task(task, 0);
-        break;
-    default:
-        LOG("run task in not valid state %d\n", task->status);
+    switch (task->status) {
+        case WAIT:
+            task->status = RUNNING;
+            if (swapcontext(&(task->sched->tempData), &(task->tempData)) == -1) {
+                LOG("swapcontext error (%d): %s\n", errno, strerror(errno));
+            }
+            break;
+        case RUNNING:
+            // if you reach this point means that the task is terminated without call
+            // setReturnValue_task. This is teorically a programming problem but it
+            // can be easy managed and so ...
+            LOG("missing setting of return value\n");
+            setReturnValue_task(task, 0);
+            break;
+        default:
+            LOG("run task in not valid state %d\n", task->status);
     }
 
 }
@@ -276,8 +274,7 @@ static void run_task(task_t * const task)
  *
  * @param task task to be destroyed
  */
-static void destroy_task(task_t ** const task)
-{
+static void destroy_task(task_t * * const task) {
     assert(NULL != task);
     if (NULL != *task) {
         // destroy data passed to start
@@ -296,8 +293,7 @@ static void destroy_task(task_t ** const task)
  *
  * @param task
  */
-void yield_task(task_t * const task)
-{
+void yield_task(task_t * const task) {
     assert(NULL != task);
     assert(NULL != task->sched);
     task->status = WAIT;
@@ -311,12 +307,11 @@ void yield_task(task_t * const task)
  *
  * @param task
  */
-void wait_task(task_t * const task, tid_t tid)
-{
+void wait_task(task_t * const task, tid_t tid) {
     assert(NULL != task);
     assert(task->tid != tid);
 
-    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 
     mapTask_t *__mapTask__ = NULL;
     HASH_FIND_INT(gAvailableTask, &(tid), __mapTask__);
@@ -330,7 +325,7 @@ void wait_task(task_t * const task, tid_t tid)
     newWaitCond->task = task;
     LL_PREPEND(__mapTask__->listWaiting, newWaitCond);
 
-    UNLOCK_AVAILABLE_TASK;                 // safe access to gAvailableTask
+    UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 
     suspend_task(task);
 }
@@ -339,8 +334,7 @@ void wait_task(task_t * const task, tid_t tid)
  *
  * @param task
  */
-void suspend_task(task_t * const task)
-{
+void suspend_task(task_t * const task) {
     assert(NULL != task);
     assert(NULL != task->sched);
     task->status = SUSPENDED;
@@ -369,8 +363,7 @@ static int lib_event_initialized = 0;
  *
  * @return return a valid scheduler
  */
-sched_t * create_sched(unsigned int config)
-{
+sched_t * create_sched(unsigned int config) {
     sched_t * const sched = (sched_t *) malloc(sizeof (sched_t));
     assert(NULL != sched);
 
@@ -378,14 +371,14 @@ sched_t * create_sched(unsigned int config)
     assert(NULL != newSched);
 
     struct event_base * const ev_base_event = event_base_new();
-    assert( NULL != ev_base_event );
+    assert(NULL != ev_base_event);
 
-    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
-    sched->sid = ++gSchedId;               // set scheduler id
-    sched->numAvailableTask = 0;           // set no available task
-    sched->readyTask = NULL;               // set empty list
-    sched->config = config;                // configure scheduler
-    sched->stop = 0;                       // set stop to don't stop
+    LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
+    sched->sid = ++gSchedId; // set scheduler id
+    sched->numAvailableTask = 0; // set no available task
+    sched->readyTask = NULL; // set empty list
+    sched->config = config; // configure scheduler
+    sched->stop = 0; // set stop to don't stop
 
     if (lib_event_initialized == 0) {
 #ifdef THREADSAFE_SCHED
@@ -404,7 +397,7 @@ sched_t * create_sched(unsigned int config)
     newSched->sched = sched;
     HASH_ADD_INT(gMapSched, sched->sid, newSched);
 
-    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 
     return sched;
 }
@@ -423,18 +416,17 @@ void stopRequest_sched(sched_t * const sched) {
  *
  * @param sched scheduler to be destroyed
  */
-void destroy_sched(sched_t ** const sched)
-{
+void destroy_sched(sched_t * * const sched) {
     assert(NULL != sched);
     if (NULL != *sched) {
-        LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+        LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
         mapSched_t * delSched = NULL;
         HASH_FIND_INT(gMapSched, &((*sched)->sid), delSched);
         assert(NULL != delSched);
         HASH_DEL(gMapSched, delSched);
-        assert( (*sched) == (delSched->sched) );
+        assert((*sched) == (delSched->sched));
         free(delSched);
-        UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+        UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
         event_base_free((*sched)->base);
         free(*sched);
         *sched = NULL;
@@ -445,8 +437,7 @@ void destroy_sched(sched_t ** const sched)
  *
  * @param task task ready
  */
-void schedule_task(task_t * const task)
-{
+void schedule_task(task_t * const task) {
     assert(NULL != task);
 
     // already running
@@ -455,12 +446,13 @@ void schedule_task(task_t * const task)
     }
 
     if (task->sched != NULL) { // if exist scheduler check if the task is already
-                               // plan  to be scheduled.
-                               // In that case nothing has to be done
+        // plan  to be scheduled.
+        // In that case nothing has to be done
         queueTask_t * elIter = NULL;
+
         CDL_FOREACH(task->sched->readyTask, elIter) {
             if (elIter->task == task) {
-                return ;                     // task already in the ready list
+                return; // task already in the ready list
             }
         }
     }
@@ -487,9 +479,8 @@ void schedule_task(task_t * const task)
  * @param stacksize stacksize (0 means default)
  */
 tid_t new_task_sched(sched_t * const sched,
-                     taskFunc_t ltaskFunc,
-                     unsigned int config, size_t stacksize)
-{
+        taskFunc_t ltaskFunc,
+        unsigned int config, size_t stacksize) {
     assert(NULL != sched);
     assert(NULL != ltaskFunc);
     // create new element for available map
@@ -499,16 +490,16 @@ tid_t new_task_sched(sched_t * const sched,
     //
     LOG("-> newtask ttid=%u\n", newTask->tid);
 
-    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 
     // add new element to the map
     HASH_ADD_INT(gAvailableTask, tid, newTask);
     ++(sched->numAvailableTask);
 
-    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 
     // schede created task it it is not have TASK_CREATE_NOT_READY property
-    if ( (config & TASK_CREATE_NOT_READY) == 0) {
+    if ((config & TASK_CREATE_NOT_READY) == 0) {
         schedule_task(newTask->task);
     }
 
@@ -519,18 +510,17 @@ tid_t new_task_sched(sched_t * const sched,
  *
  * @param sched
  */
-void mainloop_sched(sched_t * const sched)
-{
+void mainloop_sched(sched_t * const sched) {
     assert(NULL != sched);
     queueTask_t * task = NULL;
 
-    mapTask_t *delTask = NULL;          // tmp variable to delete terminated task
+    mapTask_t *delTask = NULL; // tmp variable to delete terminated task
 
     // loop while there is available task
 
-    while ( (!isStopRequested_sched(sched)) &&                          // is not stop requested
-            ! ( ((sched->config & SCHED_END_WITHOUT_TASKS) != 0) &&    // is configured to end if there is no task
-                (sched->numAvailableTask == 0) ) ) {                     // if there is some task running
+    while ((!isStopRequested_sched(sched)) && // is not stop requested
+            !(((sched->config & SCHED_END_WITHOUT_TASKS) != 0) && // is configured to end if there is no task
+            (sched->numAvailableTask == 0))) { // if there is some task running
         if (!task) {
             // get a task that is waiting to run
             CDL_POP_LAST(sched->readyTask, task);
@@ -539,55 +529,55 @@ void mainloop_sched(sched_t * const sched)
         if (NULL == task) { // there is no task available to be scheduled
             LOG("no task ready to be scheduled\n");
             // libevent task dispaching
-	    event_base_loop(sched->base, EVLOOP_ONCE /* EVLOOP_NONBLOCK */);
+            event_base_loop(sched->base, EVLOOP_ONCE /* EVLOOP_NONBLOCK */);
         } else { // there is a task that can be scheduled
             assert(NULL != task->task);
             LOG("scheduler work on task ttid=%u status=%d\n",
-                   task->task->tid, task->task->status);
+                    task->task->tid, task->task->status);
             int wakeup = 0;
             // loop to check status before and after a task execution
             do {
                 switch (task->task->status) {
-                case TERMINATED :
-                    // task is terminated so has to be removed
-                    // from the list of available task
-                    LOG("task(%u) terminated with return: %d "
-                           "so remove it from availale task\n",
-                           task->task->tid,
-                           task->task->returnValue);
-                    delTask = NULL;
+                    case TERMINATED:
+                        // task is terminated so has to be removed
+                        // from the list of available task
+                        LOG("task(%u) terminated with return: %d "
+                                "so remove it from availale task\n",
+                                task->task->tid,
+                                task->task->returnValue);
+                        delTask = NULL;
 
-                    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
-                    HASH_FIND_INT(gAvailableTask, &(task->task->tid), delTask);
-                    assert(delTask != NULL);
-                    HASH_DEL(gAvailableTask, delTask);
-                    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+                        LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
+                        HASH_FIND_INT(gAvailableTask, &(task->task->tid), delTask);
+                        assert(delTask != NULL);
+                        HASH_DEL(gAvailableTask, delTask);
+                        UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 
-                    destroy_mapTask(&delTask);
-                    free(task);
-                    task = NULL;
-                    wakeup = 0;    // stop check status
-                    break;
-                case WAIT :
-                    if (!wakeup) {
-                        run_task(task->task);
-                        wakeup = 1; // check status again
-                    } else {
+                        destroy_mapTask(&delTask);
+                        free(task);
+                        task = NULL;
+                        wakeup = 0; // stop check status
+                        break;
+                    case WAIT:
+                        if (!wakeup) {
+                            run_task(task->task);
+                            wakeup = 1; // check status again
+                        } else {
+                            CDL_PREPEND(sched->readyTask, task);
+                            wakeup = 0; // stop check status
+                        }
+                        break;
+                    case RUNNING:
+                        LOG("task ttid=%u terminate "
+                                "without call setReturnValue_task\n", task->task->tid);
+                        setReturnValue_task(task->task, 0);
                         CDL_PREPEND(sched->readyTask, task);
                         wakeup = 0; // stop check status
-                    }
-                    break;
-                case RUNNING:
-                    LOG("task ttid=%u terminate "
-                           "without call setReturnValue_task\n", task->task->tid);
-                    setReturnValue_task(task->task, 0);
-                    CDL_PREPEND(sched->readyTask, task);
-                    wakeup = 0;    // stop check status
-                    break;
-                case SUSPENDED :
-                    free(task);
-                    task = NULL;
-                    break;
+                        break;
+                    case SUSPENDED:
+                        free(task);
+                        task = NULL;
+                        break;
                 }
             } while ((task != NULL) && (wakeup != 0));
 
@@ -597,15 +587,15 @@ void mainloop_sched(sched_t * const sched)
 }
 
 task_t * getTask(tid_t tid) {
-  mapTask_t *__mapTask__ = NULL;
-  LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
-  HASH_FIND_INT(gAvailableTask, &(tid), __mapTask__);
-  UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
-  if (NULL != __mapTask__) {
-    return __mapTask__->task;
-  } else {
-    return NULL;
-  }
+    mapTask_t *__mapTask__ = NULL;
+    LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
+    HASH_FIND_INT(gAvailableTask, &(tid), __mapTask__);
+    UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
+    if (NULL != __mapTask__) {
+        return __mapTask__->task;
+    } else {
+        return NULL;
+    }
 }
 
 /** iterate over all the task available
@@ -614,11 +604,12 @@ task_t * getTask(tid_t tid) {
  */
 void iterAllTask(iterOnTask f) {
     static mapTask_t *current_task, *tmp;
-    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
+
     HASH_ITER(hh, gAvailableTask, current_task, tmp) {
         (*f)(current_task->task);
     }
-    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 }
 
 /** iterate over all the task available for the selected scheduler
@@ -628,11 +619,12 @@ void iterAllTask(iterOnTask f) {
  */
 void iterSchedTask(iterOnTask f, const sched_t * const sched) {
     static mapTask_t *current_task, *tmp;
-    LOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
+
     HASH_ITER(hh, gAvailableTask, current_task, tmp) {
         if (current_task->task->sched == sched) {
             (*f)(current_task->task);
         }
     }
-    UNLOCK_AVAILABLE_TASK;                   // safe access to gAvailableTask
+    UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 }

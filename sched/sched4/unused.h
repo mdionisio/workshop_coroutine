@@ -1,4 +1,4 @@
-/* 
+/*
  * File:   unused.h
  * Author: miki
  *
@@ -6,30 +6,30 @@
  */
 
 #ifndef UNUSED_H
-#define	UNUSED_H
+#define UNUSED_H
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
-    
+
 #define UNUSED(x) (void)(x)
 
 #ifdef __GNUC__
-#  define UNUSED_PARAMETER(x) UNUSED_ ## x __attribute__((__unused__))
+#define UNUSED_PARAMETER(x) UNUSED_ ## x __attribute__((__unused__))
 #else
-#  define UNUSED_PARAMETER(x) UNUSED_ ## x
+#define UNUSED_PARAMETER(x) UNUSED_ ## x
 #endif
 
 #ifdef __GNUC__
-#  define UNUSED_FUNCTION(x) __attribute__((__unused__)) UNUSED_ ## x
+#define UNUSED_FUNCTION(x) __attribute__((__unused__)) UNUSED_ ## x
 #else
-#  define UNUSED_FUNCTION(x) UNUSED_ ## x
+#define UNUSED_FUNCTION(x) UNUSED_ ## x
 #endif
 
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif
 
-#endif	/* UNUSED_H */
+#endif /* UNUSED_H */
 

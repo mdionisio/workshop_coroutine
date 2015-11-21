@@ -54,19 +54,19 @@
 
 /// Start Example
 static char const MESSAGE[] = "Hello, World!\n";
+
 /** task that read from socket
  *
  * @param tid  my thread id
  */
-void task_socket(tid_t const tid)
-{
+void task_socket(tid_t const tid) {
     uint8_t readingBuffer[1024];
     int datalen;
     int i;
 
     INIT_TASK;
 
-    evutil_socket_t * const fd = (evutil_socket_t *)(THIS_TASK->data);
+    evutil_socket_t * const fd = (evutil_socket_t *) (THIS_TASK->data);
     /* We got a new connection! Set up a bufferevent for it. */
     struct bufferevent *bev = bufferevent_socket_new(THIS_SCHED->base, *fd, BEV_OPT_CLOSE_ON_FREE);
 
@@ -75,25 +75,25 @@ void task_socket(tid_t const tid)
     int running = 1;
 
     while ((NULL != bev) && running && !ISSTOPREQUESTTASK) {
-        datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
+        datalen = YIELD_EVSOCKET_READ(bev, retval, (void *) readingBuffer, sizeof (readingBuffer));
 
-checkreturn:            // label to mark check returned value
-        switch(retval.type) {
+checkreturn: // label to mark check returned value
+        switch (retval.type) {
             case READ:
-                if (datalen>0) {
+                if (datalen > 0) {
                     LOG("receive %d data:", datalen);
                     BEGINLOG();
-                    for (i=0; i<datalen; i++) {
+                    for (i = 0; i < datalen; i++) {
                         if (isprint(readingBuffer[i])) {
-                            SIMPLELOG("%c", (char)readingBuffer[i]);
+                            SIMPLELOG("%c", (char) readingBuffer[i]);
                         } else {
-                            SIMPLELOG("\\x%02x", (int)readingBuffer[i]);
+                            SIMPLELOG("\\x%02x", (int) readingBuffer[i]);
                         }
                     }
                     ENDLOG();
 
                     RESET_SOCKET_RETVAL(retval);
-                    YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
+                    YIELD_EVSOCKET_WRITE(bev, (void *) MESSAGE, sizeof (MESSAGE), retval);
                     goto checkreturn; // goto check feedback
                 } else { // there is something strange
                     LOG("no data to read any more");
@@ -131,28 +131,26 @@ checkreturn:            // label to mark check returned value
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 /** task that accept new socket
  *
  * @param tid  my thread id
  */
-void task_listen(tid_t const tid)
-{
+void task_listen(tid_t const tid) {
     INIT_TASK;
 
     struct sockaddr_in sin;
 
     /* Clear the sockaddr before using it, in case there are extra
      * platform-specific fields that can mess us up. */
-    memset(&sin, 0, sizeof(sin));
+    memset(&sin, 0, sizeof (sin));
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = INADDR_ANY;
     sin.sin_port = htons(1234);
 
     /* Create a new listener */
     struct evconnlistener *listener = evconnlistener_new_bind(THIS_SCHED->base, NULL, NULL,
-				       LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, -1,
-				       (struct sockaddr *) &sin, sizeof(sin));
+            LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, -1,
+            (struct sockaddr *) &sin, sizeof (sin));
 
     if (!listener) {
         perror("Couldn't create listener\n");
@@ -163,36 +161,36 @@ void task_listen(tid_t const tid)
     int running = 1;
 
     while (running && !ISSTOPREQUESTTASK) {
-      if (YIELD_EVACCEPT(listener, returnValue) > 0) { // task wakeup because something received
-        if (returnValue.isError == 0) {                // if there is no error
-          LOG("connection accepted, create new task to manage connection");
+        if (YIELD_EVACCEPT(listener, returnValue) > 0) { // task wakeup because something received
+            if (returnValue.isError == 0) { // if there is no error
+                LOG("connection accepted, create new task to manage connection");
 
-          // create new task but do not automatically start the tasck
-          tid_t const tid = new_task_sched(THIS_SCHED,
-                                           (taskFunc_t) task_socket,
-                                           TASK_CREATE_NOT_READY,
-                                           0 /* DEFAULT STACK SIZE */);
+                // create new task but do not automatically start the tasck
+                tid_t const tid = new_task_sched(THIS_SCHED,
+                        (taskFunc_t) task_socket,
+                        TASK_CREATE_NOT_READY,
+                        0 /* DEFAULT STACK SIZE */);
 
-          // create and set data (socket) to send to the task
-          evutil_socket_t * const pTmp = (evutil_socket_t *)malloc(sizeof(evutil_socket_t));
-          *(pTmp) = returnValue.fd;
+                // create and set data (socket) to send to the task
+                evutil_socket_t * const pTmp = (evutil_socket_t *) malloc(sizeof (evutil_socket_t));
+                *(pTmp) = returnValue.fd;
 
-          task_t * const newReadtask = getTask(tid);
-          // this memory will be free when the task will be destroyed
-          newReadtask->data = (void *)pTmp;
+                task_t * const newReadtask = getTask(tid);
+                // this memory will be free when the task will be destroyed
+                newReadtask->data = (void *) pTmp;
 
-          // now all the data is configured so we are ready to start the task
-          schedule_task(newReadtask);
-        } else {                                       // there was en error in socket
-          fprintf(stderr, "Got an error %d (%s) on the listener. "
-                  "Shutting down.\n", returnValue.err, evutil_socket_error_to_string(returnValue.err));
-          running = 0;
+                // now all the data is configured so we are ready to start the task
+                schedule_task(newReadtask);
+            } else { // there was en error in socket
+                fprintf(stderr, "Got an error %d (%s) on the listener. "
+                        "Shutting down.\n", returnValue.err, evutil_socket_error_to_string(returnValue.err));
+                running = 0;
+            }
+        } else { // task wakeup for other reason
+            LOG("operation canceled");
+            running = 0;
         }
-      } else {                                         // task wakeup for other reason
-        LOG("operation canceled");
-        running = 0;
-      }
-      RESET_LISTEN_RETVAL(returnValue);
+        RESET_LISTEN_RETVAL(returnValue);
     } // end while
 
     evconnlistener_free(listener);
@@ -207,8 +205,7 @@ void task_listen(tid_t const tid)
  *
  * @param tid  my thread id
  */
-void task_connect(tid_t const tid)
-{
+void task_connect(tid_t const tid) {
     INIT_TASK;
 
     DEF_SOCKET_RETVAL(retval);
@@ -217,24 +214,24 @@ void task_connect(tid_t const tid)
 
     struct bufferevent *bev = bufferevent_socket_new(THIS_SCHED->base, -1, BEV_OPT_CLOSE_ON_FREE);
 
-    if ( (NULL != bev) && YIELD_EVSOCKET_CONNECT(bev, NULL, AF_UNSPEC, "127.0.0.1", 1234, retval) == 0 ) {
+    if ((NULL != bev) && YIELD_EVSOCKET_CONNECT(bev, NULL, AF_UNSPEC, "127.0.0.1", 1234, retval) == 0) {
         LOG("connected");
         RESET_SOCKET_RETVAL(retval);
-        YIELD_EVSOCKET_WRITE(bev, (void *)MESSAGE, sizeof(MESSAGE), retval);
+        YIELD_EVSOCKET_WRITE(bev, (void *) MESSAGE, sizeof (MESSAGE), retval);
         // wait answer
         RESET_SOCKET_RETVAL(retval);
 
         uint8_t readingBuffer[1024];
-        int datalen = YIELD_EVSOCKET_READ(bev, retval, (void *)readingBuffer, sizeof(readingBuffer));
+        int datalen = YIELD_EVSOCKET_READ(bev, retval, (void *) readingBuffer, sizeof (readingBuffer));
 
         if (datalen > 0) {
             LOG("Stress receive %d data:", datalen);
             BEGINLOG();
-            for (int i=0; i<datalen; i++) {
+            for (int i = 0; i < datalen; i++) {
                 if (isprint(readingBuffer[i])) {
-                    SIMPLELOG("%c", (char)readingBuffer[i]);
+                    SIMPLELOG("%c", (char) readingBuffer[i]);
                 } else {
-                    SIMPLELOG("\\x%02x", (int)readingBuffer[i]);
+                    SIMPLELOG("\\x%02x", (int) readingBuffer[i]);
                 }
             }
             ENDLOG();
@@ -263,26 +260,26 @@ void task_connect(tid_t const tid)
 void task_stress(tid_t const tid) {
     INIT_TASK;
 
-    struct timeval const five_sec = { 0, 500000 /* us */ };
+    struct timeval const five_sec = {0, 500000 /* us */};
 
     int i = 0;
     int running = 1;
     while (running && !ISSTOPREQUESTTASK) {
-        if (YIELD_EVSLEEP(five_sec)) {  // task wakeup for timeout
+        if (YIELD_EVSLEEP(five_sec)) { // task wakeup for timeout
 
             // create new task but do not automatically start the tasck
 
             LOG("stress connect %d", i);
 
             tid_t const tid = new_task_sched(THIS_SCHED,
-                                             (taskFunc_t) task_connect,
-                                             TASK_NONE,
-                                             0 /* DEFAULT STACK SIZE */);
+                    (taskFunc_t) task_connect,
+                    TASK_NONE,
+                    0 /* DEFAULT STACK SIZE */);
 
             LOG("stress created connect %d %u", i++, tid);
 
 
-        } else {                        // task wakeup for other reason
+        } else { // task wakeup for other reason
             LOG("operation canceled");
             running = 0;
         }
@@ -309,21 +306,21 @@ void task_counter(tid_t const tid) {
     struct timeval t2;
     double elapsedTime;
 
-    struct timeval const five_sec = { 5, 0 };
+    struct timeval const five_sec = {5, 0};
 
     int i = 0;
     int running = 1;
     while (running && !ISSTOPREQUESTTASK) {
         gettimeofday(&t1, NULL);
-        if (YIELD_EVSLEEP(five_sec)) {  // task wakeup for timeout
+        if (YIELD_EVSLEEP(five_sec)) { // task wakeup for timeout
             gettimeofday(&t2, NULL);
 
             // compute and print the elapsed time in millisec
-            elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
-            elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+            elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0; // sec to ms
+            elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
 
             LOG("counter %d (%lf ms)", i++, elapsedTime);
-        } else {                        // task wakeup for other reason
+        } else { // task wakeup for other reason
             LOG("operation canceled");
             running = 0;
         }
@@ -348,7 +345,7 @@ void task_signal(tid_t const tid) {
             iterSchedTask(stopRequest_task, THIS_SCHED);
             // iter over all Scheduled task and wakeup it
             iterSchedTask(schedule_task, THIS_SCHED);
-        } else {                      // task wakeup for other reason
+        } else { // task wakeup for other reason
             LOG("operation canceled");
             running = 0;
         }
@@ -358,16 +355,13 @@ void task_signal(tid_t const tid) {
     RETURN_TASK(0);
 }
 
-
-
 /** MAIN
  *
  * @param argc
  * @param argv
  * @return
  */
-int main(int UNUSED_PARAMETER(argc), char ** UNUSED_PARAMETER(argv))
-{
+int main(int UNUSED_PARAMETER(argc), char ** UNUSED_PARAMETER(argv)) {
     LOG("Create Scheduler");
     // create a new cooperative scheduler
     sched_t *sched = create_sched(SCHED_NONE || SCHED_END_WITHOUT_TASKS);

@@ -15,7 +15,7 @@
  *   along with Cooperative-LibEvent.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* 
+/*
  * File:   taskev.h
  * Author: Michele Dionisio
  *
@@ -25,7 +25,7 @@
 #ifndef __TASKEV_H__
 #define __TASKEV_H__
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -37,43 +37,47 @@ extern "C" {
 
 #include <signal.h>
 
-int yield_signal_ev(task_t * const task, const short signal);
+    int yield_signal_ev(task_t * const task, const short signal);
 
 #define YIELD_EVSIGNAL(x) yield_signal_ev(THIS_TASK, x)
 
-int yield_sleep_ev(task_t * const task, const struct timeval * const time);
+    int yield_sleep_ev(task_t * const task, const struct timeval * const time);
 
 #define YIELD_EVSLEEP(x) yield_sleep_ev(THIS_TASK, &x)
 
-typedef struct acceptReturn {
-  int isError;
-  evutil_socket_t fd;
-  int err;
-  task_t * task;
-} acceptReturn_t;
+    typedef struct acceptReturn {
+        int isError;
+        evutil_socket_t fd;
+        int err;
+        task_t * task;
+    } acceptReturn_t;
 
-void reset_acceptReturn(acceptReturn_t *const retval);
-int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, acceptReturn_t * const returnValue);
+    void reset_acceptReturn(acceptReturn_t * const retval);
+    int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, acceptReturn_t * const returnValue);
 
 #define DEF_LISTEN_RETVAL(x) acceptReturn_t x; reset_acceptReturn(&x)
 #define RESET_LISTEN_RETVAL(x) reset_acceptReturn(&x)
 #define YIELD_EVACCEPT(x,y) yield_accept_ev(THIS_TASK, x, &y)
 
-typedef struct socketReturn {
-  enum { UNKONWN = 0, READ, WRITE, EVENT } type;
-  short events;
-  task_t * task;
-} socketReturn_t;
+    typedef enum {
+        UNKONWN = 0, READ, WRITE, EVENT
+    } socketReturn_type_t;
 
-void reset_socketReturn(socketReturn_t *const retval);
-int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue);
-int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen);
+    typedef struct socketReturn {
+        socketReturn_type_t type;
+        short events;
+        task_t * task;
+    } socketReturn_t;
 
-int yield_socket_ev_connect(task_t * const task, 
-                            struct bufferevent * const bev, 
-                            struct evdns_base * const dns_base, 
-                            int family, const char * hostname, int port,
-                            socketReturn_t * const returnValue);
+    void reset_socketReturn(socketReturn_t * const retval);
+    int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue);
+    int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen);
+
+    int yield_socket_ev_connect(task_t * const task,
+            struct bufferevent * const bev,
+            struct evdns_base * const dns_base,
+            int family, const char * hostname, int port,
+            socketReturn_t * const returnValue);
 
 #define DEF_SOCKET_RETVAL(x) socketReturn_t x; reset_socketReturn(&x)
 #define RESET_SOCKET_RETVAL(x) reset_socketReturn(&x)
@@ -82,18 +86,18 @@ int yield_socket_ev_connect(task_t * const task,
 
 #define YIELD_EVSOCKET_CONNECT(b, d, f, h, p, y) yield_socket_ev_connect(THIS_TASK, b, d, f, h, p, &y)
 
-int yield_socket_write(task_t * const task, struct bufferevent *bufev, void * const data, size_t size, socketReturn_t * const returnValue);
+    int yield_socket_write(task_t * const task, struct bufferevent *bufev, void * const data, size_t size, socketReturn_t * const returnValue);
 
 #define YIELD_EVSOCKET_WRITE(bev, data, len, y) yield_socket_write(THIS_TASK, bev, data, len, &y)
 
 #ifdef THREADSAFE_SCHED
 
-void wakeup_immediate(tid_t tid);
+    void wakeup_immediate(tid_t tid);
 #define RESUME_FROM_THREAD(tid) wakeup_immediate(tid)
 
 #endif
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif
 

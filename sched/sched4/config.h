@@ -9,6 +9,6 @@
 // define DEBUG_SCHED_STACK_ALLOC   to have log of stacl allocation
 #undef DEBUG_SCHED_STACK_ALLOC
 
-// define stack size 
+// define stack size
 // if not defined it use SIGSTKSZ	/* recommended stack size */
 #undef MALLOC_MEMORY_SIZE

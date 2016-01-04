@@ -102,7 +102,12 @@ int yield_signal_ev(task_t * const task, const short signal) {
     event_free(ev);
     ev = NULL;
 
-    return (int) arg.event;
+    if (likely(EV_SIGNAL == arg.event)) {
+        return (int) arg.event;
+    } else {
+        LOG("task %u, resume for signal but ...", task->tid);
+        return -1;
+    }
 }
 
 // TIMEOUT
@@ -355,12 +360,10 @@ int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketR
 
     // check if thereis data to drain
     struct evbuffer * const input = bufferevent_get_input(bev);
-    if (likely(NULL != input)) {
-        if (evbuffer_get_length(input) > 0) {
-            returnValue->type = READ;
-            returnValue->events = EV_READ;
-            return returnValue->events;
-        }
+    if ((NULL != input) && (evbuffer_get_length(input) > 0)) {
+        returnValue->type = READ;
+        returnValue->events = EV_READ;
+        return returnValue->events;
     }
 
     bufferevent_setcb(bev,

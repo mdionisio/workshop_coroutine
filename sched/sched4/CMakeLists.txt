@@ -7,7 +7,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 aux_source_directory(. SRC_LIST)
 
 find_package(LibEvent REQUIRED)
-find_package(LibEventPthread REQUIRED)
+# find_package(LibEventPthread REQUIRED)
 
 set(LIBS ${LIBS} ${LIBEVENT_LIBRARIES} ${LIBEVENTPTHREAD_LIBRARIES})
 
@@ -18,4 +18,7 @@ target_link_libraries(${PROJECT_NAME} ${LIBS})
 
 MESSAGE("SOURCELIST: ${SRC_LIST}")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -Wall -Werror -Wextra -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -fuse-ld=gold -fsplit-stack -fno-stack-protector -DUSING_SPLIT_STACK -Wall -Werror -Wextra -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -Wall -Werror -Wextra -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -DDEBUG_SCHED_TASK -DDEBUG_EV_TASK -Wall -Werror -Wextra -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
+

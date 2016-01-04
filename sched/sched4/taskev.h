@@ -63,6 +63,8 @@ extern "C" {
         UNKONWN = 0, READ, WRITE, EVENT
     } socketReturn_type_t;
 
+    const char* socketReturn_type_to_str(socketReturn_type_t type);
+
     typedef struct socketReturn {
         socketReturn_type_t type;
         short events;

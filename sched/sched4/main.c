@@ -374,12 +374,12 @@ int main(int UNUSED_PARAMETER(argc), char ** UNUSED_PARAMETER(argv)) {
     new_task_sched(sched, (taskFunc_t) task_listen, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
 
     LOG("Create Counter Task");
-    new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE, 0 /* STACK SIZE */);
+    new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE, 8192 /* STACK SIZE */);
 
-    LOG("Create Connect Task");
-    new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
+    // LOG("Create Connect Task");
+    // new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
 
-    LOG("Create Stress Task");
+    LOG("Create Stress Connection Task");
     new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
 
     LOG("Start Mainloop");

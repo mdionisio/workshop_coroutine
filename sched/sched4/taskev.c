@@ -32,6 +32,23 @@
 #include <event2/util.h>
 #include <event2/buffer.h>
 
+////////////////////////////////////////////////////////////////////////////////
+#ifndef DEBUG_EV_TASK
+#define FAKELOG
+#endif
+
+/// Log Macro
+
+#ifndef __FILENAME__
+#define __FILENAME__ "taskev.c"
+#endif
+
+#include "logmacro.h"
+
+#include "config.h"
+
+#include "likely.h"
+
 // SIGNAL
 
 typedef struct signalinfo {
@@ -40,10 +57,18 @@ typedef struct signalinfo {
     short signal;
 } signal_t;
 
+const char* socketReturn_type_to_str(socketReturn_type_t type) {
+    static char *toStr[] = {"UNKONWN", "READ", "WRITE", "EVENT"};
+    return toStr[type];
+}
+
 static void
 signal_cb(evutil_socket_t UNUSED_PARAMETER(fd), short UNUSED_PARAMETER(event), void *arg) {
     signal_t * const signal = (signal_t *) arg;
     assert(NULL != signal);
+    assert(NULL != signal->task);
+
+    LOG("signal callback for task: %u", signal->task->tid);
 
     signal->event = EV_SIGNAL;
     schedule_task(signal->task);
@@ -66,7 +91,12 @@ int yield_signal_ev(task_t * const task, const short signal) {
 
     event_add(ev, NULL);
 
+    LOG("task %u, wait signal", task->tid);
+
     suspend_task(task); // task suspend;
+
+    //todo check if signal ...
+    LOG("task %u, resume for signal", task->tid);
 
     event_del(ev);
     event_free(ev);
@@ -86,6 +116,8 @@ static void ev_timeout_cb(evutil_socket_t UNUSED_PARAMETER(fd), short what, void
     timeout_t * const timeout = (timeout_t*) arg;
     assert(NULL != timeout);
     assert(NULL != timeout->task);
+
+    LOG("timeout callback for task: %u", timeout->task->tid);
 
     timeout->event = what;
     schedule_task(timeout->task);
@@ -110,7 +142,11 @@ int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
 
     event_add(ev, time);
 
+    LOG("task %u, wait timeout", task->tid);
+
     suspend_task(task); // task suspend;
+
+    LOG("task %u, resume for signal", task->tid);
 
     event_del(ev);
     event_free(ev);
@@ -135,7 +171,7 @@ static void ev_timeout_cb_thread(evutil_socket_t UNUSED_PARAMETER(fd), short UNU
     param->ev = NULL;
 
     task_t * task = getTask(param->tid);
-    if (task != NULL) {
+    if (likely(NULL != task)) {
         schedule_task(task);
     }
 
@@ -146,8 +182,8 @@ static void ev_timeout_cb_thread(evutil_socket_t UNUSED_PARAMETER(fd), short UNU
 void wakeup_immediate(tid_t tid) {
     static struct timeval const immediate = {0 /* s */, 0 /* us */};
 
-    task_t * task = getTask(tid);
-    if (task != NULL) {
+    task_t * const task = getTask(tid);
+    if (likely(NULL != task)) {
         struct callback_param * const param = (struct callback_param *) malloc(sizeof (struct callback_param));
         assert(NULL != param);
 
@@ -192,6 +228,8 @@ static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd, 
     assert(NULL != retval->task);
     assert(0 != fd);
 
+    LOG("accept connection callback for task: %u", retval->task->tid);
+
     retval->isError = 0;
     retval->fd = fd;
     retval->err = 0;
@@ -207,8 +245,10 @@ static void accept_error_cb(struct evconnlistener *listener, void *ctx) {
     assert(NULL != retval);
     assert(NULL != listener);
 
+    LOG("accept connection callback for task: %u (error)", retval->task->tid);
+
     retval->isError = 1;
-    retval->fd = 0;
+    retval->fd = -1;
     retval->err = EVUTIL_SOCKET_ERROR();
     schedule_task(retval->task);
     // don't call any other callback on this
@@ -227,7 +267,11 @@ int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, a
     evconnlistener_set_error_cb(listen, accept_error_cb);
     evconnlistener_enable(listen);
 
+    LOG("task %u wait accept connection", task->tid);
+
     suspend_task(task); // task suspend;
+
+    LOG("task %u resume for accept connection", task->tid);
 
     evconnlistener_disable(listen);
     evconnlistener_set_cb(listen, NULL, NULL);
@@ -255,7 +299,10 @@ void reset_socketReturn(socketReturn_t * const retval) {
 static void echo_read_cb(struct bufferevent *bev, void *ctx) {
     socketReturn_t * const retval = (socketReturn_t *) ctx;
     assert(NULL != retval);
+    assert(NULL != retval->task);
     assert(NULL != bev);
+
+    LOG("read callback for task: %u", retval->task->tid);
 
     retval->type = READ;
     retval->events = EV_READ;
@@ -269,7 +316,10 @@ static void echo_read_cb(struct bufferevent *bev, void *ctx) {
 static void echo_event_cb(struct bufferevent *bev, short events, void *ctx) {
     socketReturn_t * const retval = (socketReturn_t *) ctx;
     assert(NULL != retval);
+    assert(NULL != retval->task);
     assert(NULL != bev);
+
+    LOG("event callback for task: %u", retval->task->tid);
 
     retval->type = EVENT;
     retval->events = events;
@@ -283,7 +333,10 @@ static void echo_event_cb(struct bufferevent *bev, short events, void *ctx) {
 static void echo_write_cb(struct bufferevent *bev, void *ctx) {
     socketReturn_t * const retval = (socketReturn_t *) ctx;
     assert(NULL != retval);
+    assert(NULL != retval->task);
     assert(NULL != bev);
+
+    LOG("write callback for task: %u", retval->task->tid);
 
     retval->type = WRITE;
     retval->events = EV_WRITE;
@@ -302,7 +355,7 @@ int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketR
 
     // check if thereis data to drain
     struct evbuffer * const input = bufferevent_get_input(bev);
-    if (NULL != input) {
+    if (likely(NULL != input)) {
         if (evbuffer_get_length(input) > 0) {
             returnValue->type = READ;
             returnValue->events = EV_READ;
@@ -310,11 +363,14 @@ int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketR
         }
     }
 
-    bufferevent_setcb(bev, /* read */ echo_read_cb,
+    bufferevent_setcb(bev,
+            /* read  */ echo_read_cb,
             /* write */ echo_write_cb,
             /* event */ echo_event_cb, returnValue);
     bufferevent_enable(bev, EV_READ || EV_WRITE);
+    LOG("task %u wait read/write", task->tid);
     suspend_task(task); // task suspend;
+    LOG("task %u resume for read/write", task->tid);
     bufferevent_disable(bev, EV_READ || EV_WRITE);
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
     return returnValue->events;
@@ -331,25 +387,29 @@ int yield_socket_ev_connect(task_t * const task,
     assert(NULL != task);
     init_socketReturn(returnValue, task);
 
-    bufferevent_setcb(bev, /* read */ echo_read_cb,
+    bufferevent_setcb(bev,
+            /* read  */ echo_read_cb,
             /* write */ echo_write_cb,
             /* event */ echo_event_cb, returnValue);
     bufferevent_enable(bev, EV_READ || EV_WRITE);
 
-    if (bufferevent_socket_connect_hostname(bev, dns_base, family, hostname, port) == -1) {
+    if (unlikely(bufferevent_socket_connect_hostname(bev, dns_base, family, hostname, port) == -1)) {
         bufferevent_disable(bev, EV_READ || EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
         returnValue->type = UNKONWN;
         returnValue->events = 0;
         return -1;
     } else {
+        LOG("task %u wait read/write/event", task->tid);
         suspend_task(task); // task suspend;
+        LOG("task %u wait read/write/event", task->tid);
         bufferevent_disable(bev, EV_READ || EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 
-        if ((returnValue->type == EVENT) && (returnValue->events & BEV_EVENT_CONNECTED)) {
+        if (likely((returnValue->type == EVENT) && (returnValue->events & BEV_EVENT_CONNECTED))) {
             return 0;
         } else {
+            LOG("task %u resumed but with error", task->tid);
             return -2;
         }
     }
@@ -365,7 +425,7 @@ int yield_socket_read(task_t * const task, struct bufferevent * const bev, socke
 
     // check if thereis data to drain
     struct evbuffer * input = bufferevent_get_input(bev);
-    if (NULL != input) {
+    if (likely(NULL != input)) {
         if (evbuffer_get_length(input) > 0) {
             returnValue->type = READ;
             returnValue->events = EV_READ;
@@ -373,20 +433,27 @@ int yield_socket_read(task_t * const task, struct bufferevent * const bev, socke
         }
     }
 
-    bufferevent_setcb(bev, /* read */ echo_read_cb,
+    bufferevent_setcb(bev,
+            /* read  */ echo_read_cb,
             /* write */ NULL,
             /* event */ echo_event_cb, returnValue);
     bufferevent_enable(bev, EV_READ);
+    LOG("task %u wait read", task->tid);
     suspend_task(task); // task suspend;
+    LOG("task %u resume for read", task->tid);
     bufferevent_disable(bev, EV_READ);
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 
 ENDFUNC:
-    if (returnValue->type == READ) {
+    if (likely(returnValue->type == READ)) {
         input = bufferevent_get_input(bev);
-        if (NULL != input) {
+        if (likely(NULL != input)) {
             return evbuffer_remove(input, data, datalen);
+        } else {
+            LOG("task %u resumed but with error", task->tid);
         }
+    } else {
+        LOG("task %u resumed but with error and event: %s", task->tid, socketReturn_type_to_str(returnValue->type));
     }
     return -1;
 }
@@ -398,14 +465,16 @@ int yield_socket_write(task_t * const task, struct bufferevent * const bev, void
     assert(NULL != returnValue);
     assert(NULL != task);
     assert(NULL != bev);
-    if ((size > 0) && (data != NULL)) {
+    if (likely((size > 0) && (data != NULL))) {
         init_socketReturn(returnValue, task);
         bufferevent_setcb(bev, /* read */ NULL,
                 /* write */ echo_write_cb,
                 /* event */ echo_event_cb, returnValue);
         bufferevent_enable(bev, EV_WRITE);
         bufferevent_write(bev, data, size);
+        LOG("task %u wait write", task->tid);
         suspend_task(task); // task suspend;
+        LOG("task %u resume for write", task->tid);
         bufferevent_disable(bev, EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
         return returnValue->events;

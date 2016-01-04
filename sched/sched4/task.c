@@ -23,6 +23,7 @@
  */
 
 #include "task.h"
+#include "likely.h"
 
 #include <assert.h>
 
@@ -37,6 +38,29 @@
 #define __FILENAME__ "task.c"
 #endif
 
+
+
+
+#ifdef USING_SPLIT_STACK
+
+/* FIXME: These are not declared anywhere.  */
+#define SPIT_STACK_NUMBER_OFFSETS 10
+
+extern void *__splitstack_makecontext(size_t, void *context[SPIT_STACK_NUMBER_OFFSETS], size_t *);
+
+extern void __splitstack_releasecontext(void *context[10]);
+
+extern void * __splitstack_resetcontext(void *context[SPIT_STACK_NUMBER_OFFSETS], size_t *);
+
+extern void __splitstack_block_signals_context(void *context[SPIT_STACK_NUMBER_OFFSETS], int *, int *);
+
+#endif
+
+#define TASK_GET_CONTEXT(x) getcontext(x)
+#define TASK_MAKE_CONTEXT(x,y,...) makecontext(x,y, ##__VA_ARGS__)
+#define TASK_SWAP_CONTEXT(x,y) swapcontext(x,y)
+
+
 #include "logmacro.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,7 +68,7 @@
 #include <stdlib.h>
 
 //used for list and map management
-#include <utlist.h>
+#include "utlist_ex.h"
 #include <uthash.h>
 
 #include "config.h"
@@ -57,22 +81,6 @@
 #include <pthread.h>
 #endif
 
-#define CDL_POP_LAST(head, out)                                                \
-  do {                                                                         \
-    if (head) {                                                                \
-      (out) = (head)->prev;                                                    \
-      if ((out) == (head)) {                                                   \
-        (head) = NULL;                                                         \
-      } else {                                                                 \
-        (head)->prev = (out)->prev;                                            \
-        (head)->prev->next = (head);                                           \
-      }                                                                        \
-      (out)->prev = (out);                                                     \
-      (out)->next = (out);                                                     \
-    } else {                                                                   \
-      (out) = NULL;                                                            \
-    }                                                                          \
-  } while (0)
 
 // used for error management
 #include <errno.h>
@@ -132,7 +140,7 @@ static void destroy_task(task_t * * const task);
 
 static void destroy_mapTask(mapTask_t * * const delTask) {
     assert(NULL != delTask);
-    if (NULL != *delTask) {
+    if (likely(NULL != *delTask)) {
         assert(NULL != (*delTask)->task);
         assert(NULL != (*delTask)->task->sched);
 
@@ -186,21 +194,41 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     assert(NULL != ltaskFunc);
     assert(NULL != lsched);
     task_t * task = NULL;
-    if (memory == NULL) {
+    if (likely(memory == NULL)) {
         if (stacksize == 0) {
             stacksize = SIGSTKSZ;
         }
+#ifdef USING_SPLIT_STACK
+        memory = TASKMALLOC(sizeof (task_t));
+        assert(NULL != memory);
+
+        task = (task_t *) memory;
+        {
+            size_t ret_stacksize = stacksize;
+            task->stack = __splitstack_makecontext(stacksize,
+                    task->stack_context,
+                    &ret_stacksize);
+            stacksize = ret_stacksize;
+        }
+
+#else
         memory = TASKMALLOC(sizeof (task_t) + stacksize);
 
         assert(NULL != memory);
 
         task = (task_t *) memory;
+#endif
         task->memory = T_DYNAMIC;
     } else {
+#ifdef USING_SPLIT_STACK
+        LOG("it is not possible to use static allocated stack with split statk");
+        return NULL;
+#else
         task = (task_t *) memory;
         task->memory = T_STATIC;
         assert(stacksize > sizeof (task_t));
         stacksize -= sizeof (task_t);
+#endif
     }
     LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
     task->tid = ++gTaskId; // set unique id
@@ -212,9 +240,11 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     task->data = NULL; // in data for thread
     task->stop = 0; // set request to stop to false
     task->config = config; // set configuration
+    task->stack_size = stacksize;
+
 
     // initialize takein it from what is running now
-    if (getcontext(&(task->tempData)) == -1) {
+    if (unlikely(TASK_GET_CONTEXT(&(task->tempData)) == -1)) {
         LOG("getcontext error (%d): %s\n", errno, strerror(errno));
     }
 
@@ -225,7 +255,15 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     task->tempData.uc_stack.ss_size = stacksize;
     sigfillset(&(task->tempData.uc_sigmask)); // is used to store the set of signals blocked in the context
 
-    makecontext(&(task->tempData), (void (*)(void)) ltaskFunc, 1, task->tid);
+#ifdef USING_SPLIT_STACK
+    {
+        int dont_block_signals = 0;
+        __splitstack_block_signals_context(task->stack_context,
+                &dont_block_signals, NULL);
+    }
+#endif
+
+    TASK_MAKE_CONTEXT(&(task->tempData), (void (*)(void)) ltaskFunc, 1, task->tid);
 
     return task;
 }
@@ -253,7 +291,7 @@ static void run_task(task_t * const task) {
     switch (task->status) {
         case WAIT:
             task->status = RUNNING;
-            if (swapcontext(&(task->sched->tempData), &(task->tempData)) == -1) {
+            if (unlikely(TASK_SWAP_CONTEXT(&(task->sched->tempData), &(task->tempData)) == -1)) {
                 LOG("swapcontext error (%d): %s\n", errno, strerror(errno));
             }
             break;
@@ -276,13 +314,19 @@ static void run_task(task_t * const task) {
  */
 static void destroy_task(task_t * * const task) {
     assert(NULL != task);
-    if (NULL != *task) {
+    if (likely(NULL != *task)) {
         // destroy data passed to start
         if (NULL != (*task)->data) {
             free((*task)->data);
             (*task)->data = NULL;
         }
         if ((*task)->memory == T_DYNAMIC) {
+
+#ifdef USING_SPLIT_STACK
+            __splitstack_releasecontext((*task)->stack_context);
+            (*task)->stack = NULL;
+#endif
+
             TASKFREE(*task);
         }
         *task = NULL;
@@ -297,7 +341,7 @@ void yield_task(task_t * const task) {
     assert(NULL != task);
     assert(NULL != task->sched);
     task->status = WAIT;
-    if (swapcontext(&(task->tempData), &(task->sched->tempData)) == -1) {
+    if (unlikely(TASK_SWAP_CONTEXT(&(task->tempData), &(task->sched->tempData)) == -1)) {
         LOG("yield swapcontext error (%d): %s\n", errno, strerror(errno));
     }
     // if you are here means that you are waking up
@@ -338,7 +382,7 @@ void suspend_task(task_t * const task) {
     assert(NULL != task);
     assert(NULL != task->sched);
     task->status = SUSPENDED;
-    if (swapcontext(&(task->tempData), &(task->sched->tempData)) == -1) {
+    if (unlikely(TASK_SWAP_CONTEXT(&(task->tempData), &(task->sched->tempData)) == -1)) {
         LOG("yield swapcontext error (%d): %s\n", errno, strerror(errno));
     }
     // if you are here means that you are waking up
@@ -380,7 +424,7 @@ sched_t * create_sched(unsigned int config) {
     sched->config = config; // configure scheduler
     sched->stop = 0; // set stop to don't stop
 
-    if (lib_event_initialized == 0) {
+    if (unlikely(0 == lib_event_initialized)) {
 #ifdef THREADSAFE_SCHED
 #ifdef WIN32
         evthread_use_windows_threads();
@@ -418,7 +462,7 @@ void stopRequest_sched(sched_t * const sched) {
  */
 void destroy_sched(sched_t * * const sched) {
     assert(NULL != sched);
-    if (NULL != *sched) {
+    if (likely(NULL != *sched)) {
         LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
         mapSched_t * delSched = NULL;
         HASH_FIND_INT(gMapSched, &((*sched)->sid), delSched);
@@ -441,11 +485,11 @@ void schedule_task(task_t * const task) {
     assert(NULL != task);
 
     // already running
-    if (task->status == RUNNING) {
+    if (unlikely(task->status == RUNNING)) {
         return;
     }
 
-    if (task->sched != NULL) { // if exist scheduler check if the task is already
+    if (likely(NULL != task->sched)) { // if exist scheduler check if the task is already
         // plan  to be scheduled.
         // In that case nothing has to be done
         queueTask_t * elIter = NULL;
@@ -465,7 +509,7 @@ void schedule_task(task_t * const task) {
 
     newElem->task = task;
 
-    if (task->sched != NULL) {
+    if (likely(NULL != task->sched)) {
         // add task to the ready list
         CDL_PREPEND(task->sched->readyTask, newElem);
     }
@@ -521,7 +565,7 @@ void mainloop_sched(sched_t * const sched) {
     while ((!isStopRequested_sched(sched)) && // is not stop requested
             !(((sched->config & SCHED_END_WITHOUT_TASKS) != 0) && // is configured to end if there is no task
             (sched->numAvailableTask == 0))) { // if there is some task running
-        if (!task) {
+        if (likely(NULL == task)) {
             // get a task that is waiting to run
             CDL_POP_LAST(sched->readyTask, task);
         }
@@ -559,7 +603,7 @@ void mainloop_sched(sched_t * const sched) {
                         wakeup = 0; // stop check status
                         break;
                     case WAIT:
-                        if (!wakeup) {
+                        if (0 == wakeup) {
                             run_task(task->task);
                             wakeup = 1; // check status again
                         } else {
@@ -579,7 +623,7 @@ void mainloop_sched(sched_t * const sched) {
                         task = NULL;
                         break;
                 }
-            } while ((task != NULL) && (wakeup != 0));
+            } while ((NULL != task) && (0 != wakeup));
 
             task = NULL; // it is important to force next loop to choose another task
         }
@@ -591,7 +635,7 @@ task_t * getTask(tid_t tid) {
     LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
     HASH_FIND_INT(gAvailableTask, &(tid), __mapTask__);
     UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
-    if (NULL != __mapTask__) {
+    if (likely(NULL != __mapTask__)) {
         return __mapTask__->task;
     } else {
         return NULL;
@@ -609,6 +653,7 @@ void iterAllTask(iterOnTask f) {
     HASH_ITER(hh, gAvailableTask, current_task, tmp) {
         (*f)(current_task->task);
     }
+
     UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 }
 
@@ -626,5 +671,6 @@ void iterSchedTask(iterOnTask f, const sched_t * const sched) {
             (*f)(current_task->task);
         }
     }
+
     UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 }

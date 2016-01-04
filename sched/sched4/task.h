@@ -58,6 +58,11 @@ extern "C" {
 
 #include <event2/event.h>
 
+#ifdef USING_SPLIT_STACK
+    /* FIXME: These are not declared anywhere.  */
+#define SPIT_STACK_NUMBER_OFFSETS 10
+#endif
+
     // *****************************************************************************
     // *                        TASK/SCHEDULER DEFINITION                          *
     // *****************************************************************************
@@ -86,7 +91,7 @@ extern "C" {
      */
     struct task {
         tid_t tid; /**< unique thread identifier */
-        taskStatus_t status; /**< task status */
+        volatile taskStatus_t status; /**< task status */
         int returnValue; /**< return value valid if status == TERMINATED
                                    */
         taskFunc_t taskFunc; /**< pointer to the task function */
@@ -97,12 +102,19 @@ extern "C" {
                                    */
 
         unsigned int config; /**< configuration */
-        unsigned int stop; /**< true if ask to close */
+        volatile unsigned int stop; /**< true if ask to close */
 
         enum {
             T_DYNAMIC, T_STATIC
         } memory; /**< if STATIC memory will be not free on destroy */
+
+        size_t stack_size; /**< stack size */
+#ifdef USING_SPLIT_STACK
+        void *stack_context[SPIT_STACK_NUMBER_OFFSETS]; /**< split task context */
+        uint8_t * stack; /**< task stack */
+#else
         uint8_t stack[0]; /**< task stack */
+#endif
     };
 
     typedef struct queueTask queueTask_t; /**< task queue type */

@@ -1,8 +1,8 @@
 
 // set define THREADSAFE_SCHED if you want to have threadshafe scheduler
 // to have more than one scheduler working on more than one thread
-//#define THREADSAFE_SCHED 1
-#undef THREADSAFE_SCHED
+#define THREADSAFE_SCHED 1
+// #undef THREADSAFE_SCHED
 
 // define DEBUG_SCHED_TASK   to have log of task scheduling
 #undef DEBUG_SCHED_TASK

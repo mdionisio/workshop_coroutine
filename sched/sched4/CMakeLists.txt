@@ -7,7 +7,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 aux_source_directory(. SRC_LIST)
 
 find_package(LibEvent REQUIRED)
-# find_package(LibEventPthread REQUIRED)
+find_package(LibEventPthread REQUIRED)
 
 set(LIBS ${LIBS} ${LIBEVENT_LIBRARIES} ${LIBEVENTPTHREAD_LIBRARIES})
 

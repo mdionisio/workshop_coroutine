@@ -13,7 +13,7 @@ find_path(LIBEVENT_INCLUDE_DIR event.h
           HINTS ${PC_LIBEVENT_INCLUDEDIR} ${PC_LIBEVENT_INCLUDE_DIRS}
           )
 
-find_library(LIBEVENT_LIBRARY NAMES event event-2.0 libevent-2.0
+find_library(LIBEVENT_LIBRARY NAMES event event-2.0 libevent libevent-2.0
              HINTS ${PC_LIBEVENT_LIBDIR} ${PC_LIBEVENT_LIBRARY_DIRS} )
 
 set(LIBEVENT_LIBRARIES ${LIBEVENT_LIBRARY} )

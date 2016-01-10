@@ -453,7 +453,15 @@ sched_t * create_sched(unsigned int config) {
     sched->config = config; // configure scheduler
     sched->stop = 0; // set stop to don't stop
 
-    sched->mainloop = &task_libevent;
+    if (0 != (config & SCHED_LIBEVENT)) {
+        sched->mainloop = &task_libevent;
+    }
+    // ADD HEAR OTHER MAINLOOP LIBRARY
+
+
+    if (unlikely(sched->mainloop == NULL)) {
+        LOG("missing mainloop library");
+    }
     if ((NULL != sched->mainloop) && (NULL != sched->mainloop->create)) {
         sched->base = sched->mainloop->create();
     } else {

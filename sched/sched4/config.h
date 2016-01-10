@@ -4,7 +4,7 @@
 #define THREADSAFE_SCHED 1
 // #undef THREADSAFE_SCHED
 
-// define DEBUG_SCHED_TASK   to have log of task scheduling
+// #define DEBUG_SCHED_TASK   to have log of task scheduling
 #undef DEBUG_SCHED_TASK
 
 // define DEBUG_SCHED_STACK_ALLOC   to have log of stack allocation

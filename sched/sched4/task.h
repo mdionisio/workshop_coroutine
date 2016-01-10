@@ -129,6 +129,7 @@ extern "C" {
 
 #define SCHED_NONE                (0)
 #define SCHED_END_WITHOUT_TASKS   (1)
+#define SCHED_LIBEVENT            (2)
 
 #define TASK_NONE                 (0)
 #define TASK_CREATE_NOT_READY     (1)

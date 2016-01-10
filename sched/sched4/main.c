@@ -405,7 +405,7 @@ void task_stack_test(tid_t const tid) {
 int main(int UNUSED_PARAMETER(argc), char ** UNUSED_PARAMETER(argv)) {
     LOG("Create Scheduler");
     // create a new cooperative scheduler
-    sched_t *sched = create_sched(SCHED_NONE || SCHED_END_WITHOUT_TASKS);
+    sched_t *sched = create_sched(SCHED_NONE | SCHED_END_WITHOUT_TASKS | SCHED_LIBEVENT);
     assert(NULL != sched);
 
     LOG("Create Signal Task");

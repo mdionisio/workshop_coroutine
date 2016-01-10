@@ -360,7 +360,7 @@ void task_signal(tid_t const tid) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int recursion(int i) {
-    char pippo[8192] = "- ALLOCATE VARIABLE ON STACK TO TEST -";
+    char pippo[256] = "- ALLOCATE VARIABLE ON STACK TO TEST -";
     pippo[0] = '+'; // only use variable to avoid optimization;
     LOG("[%p] test recursion %d, '%s'", &i, i, pippo);
     if (i <= 0) {
@@ -378,13 +378,18 @@ void task_stack_test(tid_t const tid) {
     INIT_TASK;
 
     int running = 1;
-    int i = 106;
+    int i = 1;
     while (running && !ISSTOPREQUESTTASK) {
         YIELD_EVSLEEP_MSEC(100);
         LOG("[%p] test start recursion %d", &running, i);
         int res = recursion(i);
         LOG("[%p] test end recursion %d = %d", &running, i, res);
         i += 1;
+#ifndef  USING_SPLIT_STACK
+        if (i > 10) { // stack increase too much
+            i = 1;
+        }
+#endif
     } // end while
 
     LOG("end");
@@ -415,8 +420,8 @@ int main(int UNUSED_PARAMETER(argc), char ** UNUSED_PARAMETER(argv)) {
     // LOG("Create Connect Task");
     // new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
 
-    // LOG("Create Stress Connection Task");
-    // new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
+    LOG("Create Stress Connection Task");
+    new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
 
     LOG("Create stack stress Task");
     new_task_sched(sched, (taskFunc_t) task_stack_test, TASK_NONE, 16384 /* DEFAULT STACK SIZE */);

@@ -56,7 +56,7 @@ extern "C" {
     //used to have functions for context management
 #include <ucontext.h>
 
-#include <event2/event.h>
+#include <inttypes.h>
 
 #ifdef USING_SPLIT_STACK
     /* FIXME: These are not declared anywhere.  */
@@ -148,7 +148,8 @@ extern "C" {
         void *stack_context[SPIT_STACK_NUMBER_OFFSETS]; /**< split task context */
 #endif
 
-        struct event_base *base;
+        const struct sched_mainloop_interface *mainloop;
+        void *base;
     };
 
     // task

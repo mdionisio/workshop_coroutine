@@ -27,10 +27,16 @@
 
 #include <assert.h>
 
+#ifdef THREADSAFE_SCHED
+#include <event2/thread.h>
+#endif
+
 #include <event2/event.h>
 #include <errno.h>
 #include <event2/util.h>
 #include <event2/buffer.h>
+
+#include "task_loop_private.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 #ifndef DEBUG_EV_TASK
@@ -503,3 +509,38 @@ int yield_socket_write(task_t * const task, struct bufferevent * const bev, void
         return -1;
     }
 }
+
+void * taskev_create(void) {
+    static int lib_event_initialized = 0;
+
+    if (unlikely(0 == lib_event_initialized)) {
+#ifdef THREADSAFE_SCHED
+#ifdef WIN32
+        evthread_use_windows_threads();
+#else
+        evthread_use_pthreads();
+#endif
+#endif
+        lib_event_initialized = 1;
+    }
+
+    void * retval = (void *) event_base_new();
+    assert(NULL != retval);
+    return retval;
+}
+
+void taskev_destroy(void *base) {
+    assert(NULL != base);
+    event_base_free((struct event_base *) base);
+}
+
+void taskev_event_poll(void *base) {
+    assert(NULL != base);
+    event_base_loop((struct event_base *) base, EVLOOP_ONCE /* EVLOOP_NONBLOCK */);
+}
+
+const struct sched_mainloop_interface task_libevent = {
+    /* create = */ taskev_create,
+    /* destroy = */ taskev_destroy,
+    /* event_poll = */taskev_event_poll
+};

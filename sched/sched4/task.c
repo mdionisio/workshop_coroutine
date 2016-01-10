@@ -23,7 +23,10 @@
  */
 
 #include "task.h"
+#include "task_loop_private.h"
 #include "likely.h"
+
+extern struct sched_mainloop_interface const task_libevent;
 
 #include <assert.h>
 
@@ -91,10 +94,6 @@ swap(ucontext_t *x, void *x1[SPIT_STACK_NUMBER_OFFSETS], ucontext_t *y, void *y1
 #include <uthash.h>
 
 #include "config.h"
-
-#ifdef THREADSAFE_SCHED
-#include <event2/thread.h>
-#endif
 
 #ifdef THREADSAFE_SCHED
 #include <pthread.h>
@@ -436,8 +435,6 @@ void stopRequest_task(task_t * const task) {
 /// SCHEDULER IMPLEMENTATION
 ///
 
-static int lib_event_initialized = 0;
-
 /** Create a new scheduler
  *
  * @return return a valid scheduler
@@ -449,9 +446,6 @@ sched_t * create_sched(unsigned int config) {
     mapSched_t * const newSched = (mapSched_t *) malloc(sizeof (mapSched_t));
     assert(NULL != newSched);
 
-    struct event_base * const ev_base_event = event_base_new();
-    assert(NULL != ev_base_event);
-
     LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
     sched->sid = ++gSchedId; // set scheduler id
     sched->numAvailableTask = 0; // set no available task
@@ -459,18 +453,12 @@ sched_t * create_sched(unsigned int config) {
     sched->config = config; // configure scheduler
     sched->stop = 0; // set stop to don't stop
 
-    if (unlikely(0 == lib_event_initialized)) {
-#ifdef THREADSAFE_SCHED
-#ifdef WIN32
-        evthread_use_windows_threads();
-#else
-        evthread_use_pthreads();
-#endif
-#endif
-        lib_event_initialized = 1;
+    sched->mainloop = &task_libevent;
+    if ((NULL != sched->mainloop) && (NULL != sched->mainloop->create)) {
+        sched->base = sched->mainloop->create();
+    } else {
+        sched->base = NULL;
     }
-
-    sched->base = ev_base_event;
 
     newSched->sid = sched->sid;
     newSched->sched = sched;
@@ -506,7 +494,10 @@ void destroy_sched(sched_t * * const sched) {
         assert((*sched) == (delSched->sched));
         free(delSched);
         UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
-        event_base_free((*sched)->base);
+        if ((NULL != (*sched)->mainloop) && (NULL != (*sched)->mainloop->destroy) && (NULL != (*sched)->base)) {
+            (*sched)->mainloop->destroy((*sched)->base);
+        }
+        (*sched)->base = NULL;
         free(*sched);
         *sched = NULL;
     }
@@ -612,8 +603,11 @@ void mainloop_sched(sched_t * const sched) {
 
         if (NULL == task) { // there is no task available to be scheduled
             LOG("no task ready to be scheduled\n");
-            // libevent task dispaching
-            event_base_loop(sched->base, EVLOOP_ONCE /* EVLOOP_NONBLOCK */);
+            // task dispaching
+            if (likely((NULL != sched->mainloop) &&
+                    (sched->mainloop->event_poll != NULL))) {
+                sched->mainloop->event_poll(sched->base);
+            }
         } else { // there is a task that can be scheduled
             assert(NULL != task->task);
             LOG("scheduler work on task ttid=%u status=%d\n",

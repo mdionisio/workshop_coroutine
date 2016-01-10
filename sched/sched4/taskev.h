@@ -45,6 +45,14 @@ extern "C" {
 
 #define YIELD_EVSLEEP(x) yield_sleep_ev(THIS_TASK, &x)
 
+    int yield_sleep_ev_sec(task_t * const task, unsigned int sec);
+
+#define YIELD_EVSLEEP_SEC(x) yield_sleep_ev_sec(THIS_TASK, x)
+
+    int yield_sleep_ev_msec(task_t * const task, unsigned int msec);
+
+#define YIELD_EVSLEEP_MSEC(x) yield_sleep_ev_msec(THIS_TASK, x)
+
     typedef struct acceptReturn {
         int isError;
         evutil_socket_t fd;

@@ -330,6 +330,8 @@ void task_counter(tid_t const tid) {
     RETURN_TASK(0);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 /** task that manage SIGINT signal
  *
  * @param tid  my thread id
@@ -349,6 +351,40 @@ void task_signal(tid_t const tid) {
             LOG("operation canceled");
             running = 0;
         }
+    } // end while
+
+    LOG("end");
+    RETURN_TASK(0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int recursion(int i) {
+    char pippo[8192] = "- ALLOCATE VARIABLE ON STACK TO TEST -";
+    pippo[0] = '+'; // only use variable to avoid optimization;
+    LOG("[%p] test recursion %d, '%s'", &i, i, pippo);
+    if (i <= 0) {
+        return i;
+    } else {
+        return i + recursion(i - 1);
+    }
+}
+
+/** task that test stack usage
+ *
+ * @param tid  my thread id
+ */
+void task_stack_test(tid_t const tid) {
+    INIT_TASK;
+
+    int running = 1;
+    int i = 106;
+    while (running && !ISSTOPREQUESTTASK) {
+        YIELD_EVSLEEP_MSEC(100);
+        LOG("[%p] test start recursion %d", &running, i);
+        int res = recursion(i);
+        LOG("[%p] test end recursion %d = %d", &running, i, res);
+        i += 1;
     } // end while
 
     LOG("end");
@@ -379,8 +415,11 @@ int main(int UNUSED_PARAMETER(argc), char ** UNUSED_PARAMETER(argv)) {
     // LOG("Create Connect Task");
     // new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
 
-    LOG("Create Stress Connection Task");
-    new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
+    // LOG("Create Stress Connection Task");
+    // new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
+
+    LOG("Create stack stress Task");
+    new_task_sched(sched, (taskFunc_t) task_stack_test, TASK_NONE, 16384 /* DEFAULT STACK SIZE */);
 
     LOG("Start Mainloop");
     // start scheduler

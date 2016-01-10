@@ -160,6 +160,22 @@ int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
     return (int) arg.event;
 }
 
+int yield_sleep_ev_sec(task_t * const task, unsigned int sec) {
+    struct timeval time = {0, 0};
+    time.tv_sec = sec;
+    return yield_sleep_ev(task, &time);
+}
+
+int yield_sleep_ev_msec(task_t * const task, unsigned int msec) {
+    struct timeval time = {0, 0};
+    const unsigned int sec = msec / 1000;
+    const unsigned int usec = (msec % 1000) * 1000;
+    time.tv_sec = sec;
+    time.tv_usec = usec;
+    return yield_sleep_ev(task, &time);
+}
+
+
 #ifdef THREADSAFE_SCHED
 
 struct callback_param {

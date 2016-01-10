@@ -144,6 +144,10 @@ extern "C" {
                                    * (uesed as queue) */
         ucontext_t tempData; /**< structure to save task data when
                                    * interrupted */
+#ifdef USING_SPLIT_STACK
+        void *stack_context[SPIT_STACK_NUMBER_OFFSETS]; /**< split task context */
+#endif
+
         struct event_base *base;
     };
 

@@ -46,19 +46,38 @@
 /* FIXME: These are not declared anywhere.  */
 #define SPIT_STACK_NUMBER_OFFSETS 10
 
+extern void __splitstack_getcontext(void *context[SPIT_STACK_NUMBER_OFFSETS]);
+
+extern void __splitstack_setcontext(void *context[SPIT_STACK_NUMBER_OFFSETS]);
+
 extern void *__splitstack_makecontext(size_t, void *context[SPIT_STACK_NUMBER_OFFSETS], size_t *);
 
 extern void __splitstack_releasecontext(void *context[10]);
 
 extern void * __splitstack_resetcontext(void *context[SPIT_STACK_NUMBER_OFFSETS], size_t *);
 
+extern void __splitstack_block_signals(int *, int *);
+
 extern void __splitstack_block_signals_context(void *context[SPIT_STACK_NUMBER_OFFSETS], int *, int *);
 
+static int
+swap(ucontext_t *x, void *x1[SPIT_STACK_NUMBER_OFFSETS], ucontext_t *y, void *y1[SPIT_STACK_NUMBER_OFFSETS]) {
+    __splitstack_getcontext(x1);
+    __splitstack_setcontext(y1);
+    int res = swapcontext(x, y);
+    __splitstack_setcontext(x1);
+    return res;
+}
+
+#define TASK_SWAP_CONTEXT(x,y) swap(&(x->tempData), x->stack_context, &(y->tempData), y->stack_context)
+
+#else
+#define TASK_SWAP_CONTEXT(x,y) swapcontext(&(x->tempData),&(y->tempData))
 #endif
 
 #define TASK_GET_CONTEXT(x) getcontext(x)
 #define TASK_MAKE_CONTEXT(x,y,...) makecontext(x,y, ##__VA_ARGS__)
-#define TASK_SWAP_CONTEXT(x,y) swapcontext(x,y)
+
 
 
 #include "logmacro.h"
@@ -85,6 +104,10 @@ extern void __splitstack_block_signals_context(void *context[SPIT_STACK_NUMBER_O
 // used for error management
 #include <errno.h>
 #include <string.h>
+
+// used to get stack size
+#include <unistd.h>
+#include <sys/resource.h>
 
 // *****************************************************************************
 // *                        TASK/SCHEDULER DEFINITION                          *
@@ -197,6 +220,17 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     if (likely(memory == NULL)) {
         if (stacksize == 0) {
             stacksize = SIGSTKSZ;
+            /*
+            struct rlimit rl;
+            if (0 == getrlimit(RLIMIT_STACK, &rl)) {
+                stacksize = rl.rlim_cur;
+            }
+             */
+        }
+        size_t min_stacksize = sysconf(_SC_THREAD_STACK_MIN);
+        if (stacksize < min_stacksize) {
+            stacksize = min_stacksize;
+            LOG("stack size incremented to the minumum %ld", (long int) stacksize);
         }
 #ifdef USING_SPLIT_STACK
         memory = TASKMALLOC(sizeof (task_t));
@@ -206,7 +240,7 @@ static task_t * create_task(taskFunc_t ltaskFunc,
         {
             size_t ret_stacksize = stacksize;
             task->stack = __splitstack_makecontext(stacksize,
-                    task->stack_context,
+                    &(task->stack_context[0]),
                     &ret_stacksize);
             stacksize = ret_stacksize;
         }
@@ -214,6 +248,7 @@ static task_t * create_task(taskFunc_t ltaskFunc,
 #else
         memory = TASKMALLOC(sizeof (task_t) + stacksize);
 
+        assert(NULL != task->stack);
         assert(NULL != memory);
 
         task = (task_t *) memory;
@@ -258,7 +293,7 @@ static task_t * create_task(taskFunc_t ltaskFunc,
 #ifdef USING_SPLIT_STACK
     {
         int dont_block_signals = 0;
-        __splitstack_block_signals_context(task->stack_context,
+        __splitstack_block_signals_context(&(task->stack_context[0]),
                 &dont_block_signals, NULL);
     }
 #endif
@@ -291,7 +326,7 @@ static void run_task(task_t * const task) {
     switch (task->status) {
         case WAIT:
             task->status = RUNNING;
-            if (unlikely(TASK_SWAP_CONTEXT(&(task->sched->tempData), &(task->tempData)) == -1)) {
+            if (unlikely(TASK_SWAP_CONTEXT(task->sched, task) == -1)) {
                 LOG("swapcontext error (%d): %s\n", errno, strerror(errno));
             }
             break;
@@ -341,7 +376,7 @@ void yield_task(task_t * const task) {
     assert(NULL != task);
     assert(NULL != task->sched);
     task->status = WAIT;
-    if (unlikely(TASK_SWAP_CONTEXT(&(task->tempData), &(task->sched->tempData)) == -1)) {
+    if (unlikely(TASK_SWAP_CONTEXT(task, task->sched) == -1)) {
         LOG("yield swapcontext error (%d): %s\n", errno, strerror(errno));
     }
     // if you are here means that you are waking up
@@ -382,7 +417,7 @@ void suspend_task(task_t * const task) {
     assert(NULL != task);
     assert(NULL != task->sched);
     task->status = SUSPENDED;
-    if (unlikely(TASK_SWAP_CONTEXT(&(task->tempData), &(task->sched->tempData)) == -1)) {
+    if (unlikely(TASK_SWAP_CONTEXT(task, task->sched) == -1)) {
         LOG("yield swapcontext error (%d): %s\n", errno, strerror(errno));
     }
     // if you are here means that you are waking up
@@ -559,6 +594,11 @@ void mainloop_sched(sched_t * const sched) {
     queueTask_t * task = NULL;
 
     mapTask_t *delTask = NULL; // tmp variable to delete terminated task
+
+#ifdef USING_SPLIT_STACK
+    int block = 0;
+    __splitstack_block_signals(&block, NULL);
+#endif
 
     // loop while there is available task
 

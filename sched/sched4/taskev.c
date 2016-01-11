@@ -242,6 +242,7 @@ static void init_acceptReturn(acceptReturn_t * const retval, struct evconnlisten
 }
 
 void reset_acceptReturn(acceptReturn_t * const retval) {
+    assert(NULL != retval);
     retval->isError = 0;
     retval->fd = -1;
     retval->err = 0;
@@ -418,7 +419,8 @@ int yield_socket_ev_connect(task_t * const task,
             /* event */ echo_event_cb, returnValue);
     bufferevent_enable(bev, EV_READ || EV_WRITE);
 
-    if (unlikely(bufferevent_socket_connect_hostname(bev, dns_base, family, hostname, port) == -1)) {
+    if (unlikely(bufferevent_socket_connect_hostname(
+            bev, dns_base, family, hostname, port) == -1)) {
         bufferevent_disable(bev, EV_READ || EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
         returnValue->type = UNKONWN;
@@ -431,7 +433,8 @@ int yield_socket_ev_connect(task_t * const task,
         bufferevent_disable(bev, EV_READ || EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 
-        if (likely((returnValue->type == EVENT) && (returnValue->events & BEV_EVENT_CONNECTED))) {
+        if (likely((returnValue->type == EVENT) &&
+                (0 != (returnValue->events & BEV_EVENT_CONNECTED)))) {
             return 0;
         } else {
             LOG("task %u resumed but with error", task->tid);

@@ -684,6 +684,11 @@ task_t * getTask(tid_t tid) {
     }
 }
 
+size_t getStackSize(const task_t *task) {
+    assert(NULL != task);
+    return task->stack_size;
+}
+
 /** iterate over all the task available
  *
  * @param f function to execute over each thread

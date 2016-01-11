@@ -48,7 +48,6 @@ extern "C" {
 #endif
 #endif
 
-#include <stdio.h>
 #include <stdlib.h>
 
 #include "config.h"
@@ -169,7 +168,7 @@ extern "C" {
     void stopRequest_task(task_t * const task);
 
     // schedule
-    sched_t * create_sched();
+    sched_t * create_sched(unsigned int config);
 
     void destroy_sched(sched_t * * const sched);
 
@@ -186,6 +185,8 @@ extern "C" {
 
     // utiles
     task_t * getTask(tid_t tid);
+
+    size_t getStackSize(const task_t *);
 
 
 #define INIT_TASK task_t * const THIS_TASK = getTask(tid)

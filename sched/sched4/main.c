@@ -59,7 +59,7 @@ static char const MESSAGE[] = "Hello, World!\n";
  *
  * @param tid  my thread id
  */
-void task_socket(tid_t const tid) {
+static void task_socket(tid_t const tid) {
     uint8_t readingBuffer[1024];
     int datalen;
     int i;
@@ -135,7 +135,7 @@ checkreturn: // label to mark check returned value
  *
  * @param tid  my thread id
  */
-void task_listen(tid_t const tid) {
+static void task_listen(tid_t const tid) {
     INIT_TASK;
 
     struct sockaddr_in sin;
@@ -205,7 +205,7 @@ void task_listen(tid_t const tid) {
  *
  * @param tid  my thread id
  */
-void task_connect(tid_t const tid) {
+static void task_connect(tid_t const tid) {
     INIT_TASK;
 
     DEF_SOCKET_RETVAL(retval);
@@ -257,7 +257,7 @@ void task_connect(tid_t const tid) {
  *
  * @param tid  my thread id
  */
-void task_stress(tid_t const tid) {
+static void task_stress(tid_t const tid) {
     INIT_TASK;
 
     struct timeval const five_sec = {0, 500000 /* us */};
@@ -299,7 +299,7 @@ void task_stress(tid_t const tid) {
  *
  * @param tid  my thread id
  */
-void task_counter(tid_t const tid) {
+static void task_counter(tid_t const tid) {
     INIT_TASK;
 
     struct timeval t1;
@@ -336,7 +336,7 @@ void task_counter(tid_t const tid) {
  *
  * @param tid  my thread id
  */
-void task_signal(tid_t const tid) {
+static void task_signal(tid_t const tid) {
     INIT_TASK;
 
     int running = 1;
@@ -359,7 +359,7 @@ void task_signal(tid_t const tid) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int recursion(int i) {
+static int recursion(int i) {
     char pippo[256] = "- ALLOCATE VARIABLE ON STACK TO TEST -";
     pippo[0] = '+'; // only use variable to avoid optimization;
     LOG("[%p] test recursion %d, '%s'", &i, i, pippo);
@@ -374,7 +374,7 @@ int recursion(int i) {
  *
  * @param tid  my thread id
  */
-void task_stack_test(tid_t const tid) {
+static void task_stack_test(tid_t const tid) {
     INIT_TASK;
 
     int running = 1;

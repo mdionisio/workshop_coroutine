@@ -50,7 +50,11 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#undef TEST_CONNECTION
+#undef TEST_SIMPLE_CONNECTION
+#undef TEST_RECURSION
 
+////////////////////////////////////////////////////////////////////////////////
 
 /// Start Example
 static char const MESSAGE[] = "Hello, World!\n";
@@ -64,6 +68,8 @@ static void task_socket(tid_t const tid) {
     int datalen;
     int i;
 
+    struct timeval const ten_sec = {10, 0};
+
     INIT_TASK;
 
     evutil_socket_t * const fd = (evutil_socket_t *) (THIS_TASK->data);
@@ -75,7 +81,7 @@ static void task_socket(tid_t const tid) {
     int running = 1;
 
     while ((NULL != bev) && running && !ISSTOPREQUESTTASK) {
-        datalen = YIELD_EVSOCKET_READ(bev, retval, (void *) readingBuffer, sizeof (readingBuffer));
+        datalen = YIELD_EVSOCKET_READ_TIMEOUT(bev, retval, (void *) readingBuffer, sizeof (readingBuffer), ten_sec);
 
 checkreturn: // label to mark check returned value
         switch (retval.type) {
@@ -108,6 +114,7 @@ checkreturn: // label to mark check returned value
                     perror("Error from bufferevent\n");
                 }
                 if (retval.events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
+                    LOG("operation canceled for close client");
                     running = 0;
                 }
                 break;
@@ -201,6 +208,10 @@ static void task_listen(tid_t const tid) {
     RETURN_TASK(0);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+#if defined(TEST_CONNECTION) || defined(TEST_SIMPLE_CONNECTION)
+
 /** task that connect to a listening socket
  *
  * @param tid  my thread id
@@ -250,8 +261,11 @@ static void task_connect(tid_t const tid) {
     RETURN_TASK(0);
 }
 
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
+
+#ifdef TEST_CONNECTION
 
 /** task that show how sleep works
  *
@@ -289,6 +303,7 @@ static void task_stress(tid_t const tid) {
     RETURN_TASK(0);
 }
 
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -359,6 +374,8 @@ static void task_signal(tid_t const tid) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef TEST_RECURSION
+
 static int recursion(int i) {
     char pippo[256] = "- ALLOCATE VARIABLE ON STACK TO TEST -";
     pippo[0] = '+'; // only use variable to avoid optimization;
@@ -396,6 +413,8 @@ static void task_stack_test(tid_t const tid) {
     RETURN_TASK(0);
 }
 
+#endif
+
 /** MAIN
  *
  * @param argc
@@ -417,14 +436,20 @@ int main(int UNUSED_PARAMETER(argc), char ** UNUSED_PARAMETER(argv)) {
     LOG("Create Counter Task");
     new_task_sched(sched, (taskFunc_t) task_counter, TASK_NONE, 8192 /* STACK SIZE */);
 
-    // LOG("Create Connect Task");
-    // new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
+#ifdef TEST_SIMPLE_CONNECTION
+    LOG("Create Connect Task");
+    new_task_sched(sched, (taskFunc_t) task_connect, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
+#endif
 
+#ifdef TEST_CONNECTION
     LOG("Create Stress Connection Task");
     new_task_sched(sched, (taskFunc_t) task_stress, TASK_NONE, 0 /* DEFAULT STACK SIZE */);
+#endif
 
+#ifdef TEST_RECURSION
     LOG("Create stack stress Task");
     new_task_sched(sched, (taskFunc_t) task_stack_test, TASK_NONE, 16384 /* DEFAULT STACK SIZE */);
+#endif
 
     LOG("Start Mainloop");
     // start scheduler

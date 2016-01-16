@@ -37,9 +37,10 @@ extern "C" {
 
 #include <signal.h>
 
-    int yield_signal_ev(task_t * const task, const short signal);
+    int yield_signal_ev(task_t * const task, const short signal, const struct timeval * const timeout);
 
-#define YIELD_EVSIGNAL(x) yield_signal_ev(THIS_TASK, x)
+#define YIELD_EVSIGNAL(x) yield_signal_ev(THIS_TASK, x, NULL)
+#define YIELD_EVSIGNAL_TIMEOUT(x, timeout) yield_signal_ev(THIS_TASK, x, &timeout)
 
     int yield_sleep_ev(task_t * const task, const struct timeval * const time);
 
@@ -61,14 +62,19 @@ extern "C" {
     } acceptReturn_t;
 
     void reset_acceptReturn(acceptReturn_t * const retval);
-    int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, acceptReturn_t * const returnValue);
+
+    int yield_accept_ev(task_t * const task,
+            struct evconnlistener * const listen,
+            acceptReturn_t * const returnValue,
+            const struct timeval * const timeout);
 
 #define DEF_LISTEN_RETVAL(x) acceptReturn_t x; reset_acceptReturn(&x)
 #define RESET_LISTEN_RETVAL(x) reset_acceptReturn(&x)
-#define YIELD_EVACCEPT(x,y) yield_accept_ev(THIS_TASK, x, &y)
+#define YIELD_EVACCEPT(x, y) yield_accept_ev(THIS_TASK, x, &y, NULL)
+#define YIELD_EVACCEPT_TIMEOUT(x, y, timeout) yield_accept_ev(THIS_TASK, x, &y, &timeout)
 
     typedef enum {
-        UNKONWN = 0, READ, WRITE, EVENT
+        UNKONWN = -1, READ = 1, WRITE = 2, EVENT = 3
     } socketReturn_type_t;
 
     const char* socketReturn_type_to_str(socketReturn_type_t type);
@@ -80,25 +86,45 @@ extern "C" {
     } socketReturn_t;
 
     void reset_socketReturn(socketReturn_t * const retval);
-    int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue);
-    int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen);
+
+    int yield_socket_ev(task_t * const task,
+            struct bufferevent * const bev,
+            socketReturn_t * const returnValue,
+            const struct timeval * const timeout);
+
+    int yield_socket_read(task_t * const task,
+            struct bufferevent * const bev,
+            socketReturn_t * const returnValue,
+            void * const data,
+            size_t datalen,
+            const struct timeval * const timeout);
 
     int yield_socket_ev_connect(task_t * const task,
             struct bufferevent * const bev,
             struct evdns_base * const dns_base,
             int family, const char * hostname, int port,
-            socketReturn_t * const returnValue);
+            socketReturn_t * const returnValue,
+            const struct timeval * const timeout);
 
 #define DEF_SOCKET_RETVAL(x) socketReturn_t x; reset_socketReturn(&x)
 #define RESET_SOCKET_RETVAL(x) reset_socketReturn(&x)
-#define YIELD_EVSOCKET(x,y) yield_socket_ev(THIS_TASK, x, &y)
-#define YIELD_EVSOCKET_READ(x,y,data,sizedata) yield_socket_read(THIS_TASK, x, &y, data, sizedata)
+#define YIELD_EVSOCKET(x, y) yield_socket_ev(THIS_TASK, x, &y, NULL)
+#define YIELD_EVSOCKET_TIMEOUT(x, y, timeout) yield_socket_ev(THIS_TASK, x, &y, &timeout)
+#define YIELD_EVSOCKET_READ(x, y, data, sizedata) yield_socket_read(THIS_TASK, x, &y, data, sizedata, NULL)
+#define YIELD_EVSOCKET_READ_TIMEOUT(x, y, data, sizedata, timeout) yield_socket_read(THIS_TASK, x, &y, data, sizedata, &timeout)
 
-#define YIELD_EVSOCKET_CONNECT(b, d, f, h, p, y) yield_socket_ev_connect(THIS_TASK, b, d, f, h, p, &y)
+#define YIELD_EVSOCKET_CONNECT(b, d, f, h, p, y) yield_socket_ev_connect(THIS_TASK, b, d, f, h, p, &y, NULL)
+#define YIELD_EVSOCKET_CONNECT_TIMEOUT(b, d, f, h, p, y, timeout) yield_socket_ev_connect(THIS_TASK, b, d, f, h, p, &y, &timeout)
 
-    int yield_socket_write(task_t * const task, struct bufferevent *bufev, void * const data, size_t size, socketReturn_t * const returnValue);
+    int yield_socket_write(task_t * const task,
+            struct bufferevent *bufev,
+            void * const data,
+            size_t size,
+            socketReturn_t * const returnValue,
+            const struct timeval * const timeout);
 
-#define YIELD_EVSOCKET_WRITE(bev, data, len, y) yield_socket_write(THIS_TASK, bev, data, len, &y)
+#define YIELD_EVSOCKET_WRITE(bev, data, len, y) yield_socket_write(THIS_TASK, bev, data, len, &y, NULL)
+#define YIELD_EVSOCKET_WRITE_TIMEOUT(bev, data, len, y, timeout) yield_socket_write(THIS_TASK, bev, data, len, &y, &timeout)
 
 #ifdef THREADSAFE_SCHED
 

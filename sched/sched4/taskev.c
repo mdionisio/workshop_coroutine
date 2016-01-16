@@ -55,67 +55,6 @@
 
 #include "likely.h"
 
-// SIGNAL
-
-typedef struct signalinfo {
-    task_t * task;
-    short event;
-    short signal;
-} signal_t;
-
-const char* socketReturn_type_to_str(socketReturn_type_t type) {
-    static char *toStr[] = {"UNKONWN", "READ", "WRITE", "EVENT"};
-    return toStr[type];
-}
-
-static void
-signal_cb(evutil_socket_t UNUSED_PARAMETER(fd), short UNUSED_PARAMETER(event), void *arg) {
-    signal_t * const signal = (signal_t *) arg;
-    assert(NULL != signal);
-    assert(NULL != signal->task);
-
-    LOG("signal callback for task: %u", signal->task->tid);
-
-    signal->event = EV_SIGNAL;
-    schedule_task(signal->task);
-}
-
-int yield_signal_ev(task_t * const task, const short signal) {
-    assert(NULL != task);
-    assert(NULL != task->sched);
-    assert(NULL != task->sched->base);
-    struct event *ev = NULL;
-    signal_t arg;
-
-    arg.task = task;
-    arg.event = 0;
-    arg.signal = signal;
-
-    /* call sighup_function on a HUP signal */
-    ev = evsignal_new(task->sched->base, signal, signal_cb, &arg);
-    assert(NULL != ev);
-
-    event_add(ev, NULL);
-
-    LOG("task %u, wait signal", task->tid);
-
-    suspend_task(task); // task suspend;
-
-    //todo check if signal ...
-    LOG("task %u, resume for signal", task->tid);
-
-    event_del(ev);
-    event_free(ev);
-    ev = NULL;
-
-    if (likely(EV_SIGNAL == arg.event)) {
-        return (int) arg.event;
-    } else {
-        LOG("task %u, resume for signal but ...", task->tid);
-        return -1;
-    }
-}
-
 // TIMEOUT
 
 typedef struct timeoutinfo {
@@ -145,10 +84,10 @@ int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
     arg.task = task;
 
     struct event * ev = event_new(task->sched->base,
-            -1,
+            -1, /* no file descriptor */
             EV_TIMEOUT,
-            ev_timeout_cb,
-            &arg);
+            ev_timeout_cb, /* callback */
+            &arg); /* extra argument to the callback */
     assert(NULL != ev);
 
     event_add(ev, time);
@@ -163,7 +102,12 @@ int yield_sleep_ev(task_t * const task, const struct timeval * const time) {
     event_free(ev);
     ev = NULL;
 
-    return (int) arg.event;
+    if (likely(EV_TIMEOUT == arg.event)) {
+        return (int) arg.event;
+    } else {
+        LOG("task %u, resume for timeout but wrong event %d", task->tid, (int) arg.event);
+        return -1;
+    }
 }
 
 int yield_sleep_ev_sec(task_t * const task, unsigned int sec) {
@@ -181,6 +125,92 @@ int yield_sleep_ev_msec(task_t * const task, unsigned int msec) {
     return yield_sleep_ev(task, &time);
 }
 
+// SIGNAL
+
+typedef struct signalinfo {
+    task_t * task;
+    short event;
+    short signal;
+} signal_t;
+
+const char* socketReturn_type_to_str(socketReturn_type_t type) {
+    static char *toStr[] = {"UNKONWN", "READ", "WRITE", "EVENT"};
+    return toStr[type];
+}
+
+static void
+signal_cb(evutil_socket_t UNUSED_PARAMETER(fd), short UNUSED_PARAMETER(event), void *arg) {
+    signal_t * const signal = (signal_t *) arg;
+    assert(NULL != signal);
+    assert(NULL != signal->task);
+
+    LOG("signal callback for task: %u", signal->task->tid);
+
+    signal->event = EV_SIGNAL;
+    schedule_task(signal->task);
+}
+
+int yield_signal_ev(task_t * const task, const short signal, const struct timeval * const timeout) {
+    assert(NULL != task);
+    assert(NULL != task->sched);
+    assert(NULL != task->sched->base);
+
+    timeout_t arg_timeout;
+    arg_timeout.event = 0;
+    arg_timeout.task = task;
+
+    struct event * ev_timeout = NULL;
+
+    if (NULL != timeout) {
+        ev_timeout = event_new(task->sched->base,
+                -1, /* no file descriptor */
+                EV_TIMEOUT,
+                ev_timeout_cb, /* callback */
+                &arg_timeout); /* extra argument to the callback */
+        assert(NULL != ev_timeout);
+
+        event_add(ev_timeout, timeout);
+    }
+
+    signal_t arg;
+
+    arg.task = task;
+    arg.event = 0;
+    arg.signal = signal;
+
+    /* call sighup_function on a HUP signal */
+    struct event *ev = evsignal_new(task->sched->base, signal, signal_cb, &arg);
+    assert(NULL != ev);
+
+    event_add(ev, NULL);
+
+    LOG("task %u, wait signal", task->tid);
+
+    suspend_task(task); // task suspend;
+
+    //todo check if signal ...
+    LOG("task %u, resume for signal", task->tid);
+
+    event_del(ev);
+    event_free(ev);
+    ev = NULL;
+
+    if (NULL != ev_timeout) {
+        event_del(ev_timeout);
+        event_free(ev_timeout);
+        ev_timeout = NULL;
+    }
+
+    if (likely(EV_SIGNAL == arg.event)) {
+        return (int) arg.event;
+    } else {
+        LOG("task %u, resume for signal but timeout event %d",
+                task->tid, (int) arg.event);
+        return -1;
+    }
+}
+
+// IMMEDIATE WAKEUP
 
 #ifdef THREADSAFE_SCHED
 
@@ -197,7 +227,7 @@ static void ev_timeout_cb_thread(evutil_socket_t UNUSED_PARAMETER(fd), short UNU
     event_del(param->ev);
     param->ev = NULL;
 
-    task_t * task = getTask(param->tid);
+    task_t * const task = getTask(param->tid);
     if (likely(NULL != task)) {
         schedule_task(task);
     }
@@ -285,10 +315,30 @@ static void accept_error_cb(struct evconnlistener *listener, void *ctx) {
     evconnlistener_set_error_cb(listener, NULL);
 }
 
-int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, acceptReturn_t * const returnValue) {
+int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, acceptReturn_t * const returnValue, const struct timeval * const timeout) {
     assert(NULL != returnValue);
     assert(NULL != listen);
     assert(NULL != task);
+
+    timeout_t arg_timeout;
+    arg_timeout.event = 0;
+    arg_timeout.task = task;
+
+    struct event * ev_timeout = NULL;
+
+    if (NULL != timeout) {
+        assert(NULL != task->sched);
+        assert(NULL != task->sched->base);
+        ev_timeout = event_new(task->sched->base,
+                -1, /* no file descriptor */
+                EV_TIMEOUT,
+                ev_timeout_cb, /* callback */
+                &arg_timeout); /* extra argument to the callback */
+        assert(NULL != ev_timeout);
+
+        event_add(ev_timeout, timeout);
+    }
+
     init_acceptReturn(returnValue, listen, task);
 
     evconnlistener_set_cb(listen, accept_conn_cb, returnValue);
@@ -304,6 +354,12 @@ int yield_accept_ev(task_t * const task, struct evconnlistener * const listen, a
     evconnlistener_disable(listen);
     evconnlistener_set_cb(listen, NULL, NULL);
     evconnlistener_set_error_cb(listen, NULL);
+
+    if (NULL != ev_timeout) {
+        event_del(ev_timeout);
+        event_free(ev_timeout);
+        ev_timeout = NULL;
+    }
 
     return returnValue->fd;
 }
@@ -375,10 +431,20 @@ static void echo_write_cb(struct bufferevent *bev, void *ctx) {
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 }
 
-int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue) {
+int yield_socket_ev(task_t * const task,
+        struct bufferevent * const bev,
+        socketReturn_t * const returnValue,
+        const struct timeval * const timeout) {
     assert(NULL != returnValue);
     assert(NULL != bev);
     assert(NULL != task);
+
+    timeout_t arg_timeout;
+    arg_timeout.event = 0;
+    arg_timeout.task = task;
+
+    struct event * ev_timeout = NULL;
+
     init_socketReturn(returnValue, task);
 
     // check if thereis data to drain
@@ -387,6 +453,19 @@ int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketR
         returnValue->type = READ;
         returnValue->events = EV_READ;
         return returnValue->events;
+    }
+
+    if (NULL != timeout) {
+        assert(NULL != task->sched);
+        assert(NULL != task->sched->base);
+        ev_timeout = event_new(task->sched->base,
+                -1, /* no file descriptor */
+                EV_TIMEOUT,
+                ev_timeout_cb, /* callback */
+                &arg_timeout); /* extra argument to the callback */
+        assert(NULL != ev_timeout);
+
+        event_add(ev_timeout, timeout);
     }
 
     bufferevent_setcb(bev,
@@ -399,6 +478,13 @@ int yield_socket_ev(task_t * const task, struct bufferevent * const bev, socketR
     LOG("task %u resume for read/write", task->tid);
     bufferevent_disable(bev, EV_READ || EV_WRITE);
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+
+    if (NULL != ev_timeout) {
+        event_del(ev_timeout);
+        event_free(ev_timeout);
+        ev_timeout = NULL;
+    }
+
     return returnValue->events;
 }
 
@@ -406,7 +492,8 @@ int yield_socket_ev_connect(task_t * const task,
         struct bufferevent * const bev,
         struct evdns_base * const dns_base,
         int family, const char * hostname, int port,
-        socketReturn_t * const returnValue) {
+        socketReturn_t * const returnValue,
+        const struct timeval * const timeout) {
     assert(NULL != returnValue);
     assert(NULL != bev);
     assert(NULL != hostname);
@@ -427,11 +514,35 @@ int yield_socket_ev_connect(task_t * const task,
         returnValue->events = 0;
         return -1;
     } else {
+        timeout_t arg_timeout;
+        arg_timeout.event = 0;
+        arg_timeout.task = task;
+
+        struct event * ev_timeout = NULL;
+
+        if (NULL != timeout) {
+            assert(NULL != task->sched);
+            assert(NULL != task->sched->base);
+            ev_timeout = event_new(task->sched->base,
+                    -1, /* no file descriptor */
+                    EV_TIMEOUT,
+                    ev_timeout_cb, /* callback */
+                    &arg_timeout); /* extra argument to the callback */
+            assert(NULL != ev_timeout);
+
+            event_add(ev_timeout, timeout);
+        }
         LOG("task %u wait read/write/event", task->tid);
         suspend_task(task); // task suspend;
         LOG("task %u wait read/write/event", task->tid);
         bufferevent_disable(bev, EV_READ || EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+
+        if (NULL != ev_timeout) {
+            event_del(ev_timeout);
+            event_free(ev_timeout);
+            ev_timeout = NULL;
+        }
 
         if (likely((returnValue->type == EVENT) &&
                 (0 != (returnValue->events & BEV_EVENT_CONNECTED)))) {
@@ -443,12 +554,23 @@ int yield_socket_ev_connect(task_t * const task,
     }
 }
 
-int yield_socket_read(task_t * const task, struct bufferevent * const bev, socketReturn_t * const returnValue, void * const data, size_t datalen) {
+int yield_socket_read(task_t * const task,
+        struct bufferevent * const bev,
+        socketReturn_t * const returnValue,
+        void * const data, size_t datalen,
+        const struct timeval * const timeout) {
     assert(NULL != returnValue);
     assert(NULL != data);
     assert(0 != datalen);
     assert(NULL != task);
     assert(NULL != bev);
+
+    timeout_t arg_timeout;
+    arg_timeout.event = 0;
+    arg_timeout.task = task;
+
+    struct event * ev_timeout = NULL;
+
     init_socketReturn(returnValue, task);
 
     // check if thereis data to drain
@@ -461,6 +583,19 @@ int yield_socket_read(task_t * const task, struct bufferevent * const bev, socke
         }
     }
 
+    if (NULL != timeout) {
+        assert(NULL != task->sched);
+        assert(NULL != task->sched->base);
+        ev_timeout = event_new(task->sched->base,
+                -1, /* no file descriptor */
+                EV_TIMEOUT,
+                ev_timeout_cb, /* callback */
+                &arg_timeout); /* extra argument to the callback */
+        assert(NULL != ev_timeout);
+
+        event_add(ev_timeout, timeout);
+    }
+
     bufferevent_setcb(bev,
             /* read  */ echo_read_cb,
             /* write */ NULL,
@@ -471,6 +606,12 @@ int yield_socket_read(task_t * const task, struct bufferevent * const bev, socke
     LOG("task %u resume for read", task->tid);
     bufferevent_disable(bev, EV_READ);
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+
+    if (NULL != ev_timeout) {
+        event_del(ev_timeout);
+        event_free(ev_timeout);
+        ev_timeout = NULL;
+    }
 
 ENDFUNC:
     if (likely(returnValue->type == READ)) {
@@ -489,11 +630,35 @@ ENDFUNC:
 int bufferevent_write(struct bufferevent *bufev,
         const void *data, size_t size);
 
-int yield_socket_write(task_t * const task, struct bufferevent * const bev, void * const data, size_t size, socketReturn_t * const returnValue) {
+int yield_socket_write(task_t * const task,
+        struct bufferevent * const bev,
+        void * const data,
+        size_t size,
+        socketReturn_t * const returnValue,
+        const struct timeval * const timeout) {
     assert(NULL != returnValue);
     assert(NULL != task);
     assert(NULL != bev);
     if (likely((size > 0) && (data != NULL))) {
+        timeout_t arg_timeout;
+        arg_timeout.event = 0;
+        arg_timeout.task = task;
+
+        struct event * ev_timeout = NULL;
+
+        if (NULL != timeout) {
+            assert(NULL != task->sched);
+            assert(NULL != task->sched->base);
+            ev_timeout = event_new(task->sched->base,
+                    -1, /* no file descriptor */
+                    EV_TIMEOUT,
+                    ev_timeout_cb, /* callback */
+                    &arg_timeout); /* extra argument to the callback */
+            assert(NULL != ev_timeout);
+
+            event_add(ev_timeout, timeout);
+        }
+
         init_socketReturn(returnValue, task);
         bufferevent_setcb(bev, /* read */ NULL,
                 /* write */ echo_write_cb,
@@ -505,6 +670,13 @@ int yield_socket_write(task_t * const task, struct bufferevent * const bev, void
         LOG("task %u resume for write", task->tid);
         bufferevent_disable(bev, EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+
+        if (NULL != ev_timeout) {
+            event_del(ev_timeout);
+            event_free(ev_timeout);
+            ev_timeout = NULL;
+        }
+
         return returnValue->events;
     } else {
         returnValue->type = UNKONWN;

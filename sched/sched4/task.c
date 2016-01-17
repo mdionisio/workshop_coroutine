@@ -297,20 +297,21 @@ static task_t * create_task(taskFunc_t ltaskFunc,
     }
 #endif
 
-    TASK_MAKE_CONTEXT(&(task->tempData), (void (*)(void)) ltaskFunc, 1, task->tid);
+    TASK_MAKE_CONTEXT(&(task->tempData), (void (*)(void)) ltaskFunc, 0);
 
     return task;
 }
 
-/** ser return value and mark task as terminated
+task_thread_local task_t * THIS_TASK = NULL;
+
+/** set return value and mark task as terminated
  *
- * @param task
  * @param value
  */
-void setReturnValue_task(task_t * const task, int value) {
-    assert(NULL != task);
-    task->returnValue = value;
-    task->status = TERMINATED;
+void setReturnValue_task(int value) {
+    assert(NULL != THIS_TASK);
+    THIS_TASK->returnValue = value;
+    THIS_TASK->status = TERMINATED;
 }
 
 /** run or wakeup a task
@@ -321,6 +322,8 @@ static void run_task(task_t * const task) {
     assert(NULL != task);
     assert(NULL != task->sched);
     LOG("run_task tid=%u %d\n", task->tid, task->status);
+
+    THIS_TASK = task;
 
     switch (task->status) {
         case WAIT:
@@ -334,11 +337,13 @@ static void run_task(task_t * const task) {
             // setReturnValue_task. This is teorically a programming problem but it
             // can be easy managed and so ...
             LOG("missing setting of return value\n");
-            setReturnValue_task(task, 0);
+            setReturnValue_task(0);
             break;
         default:
             LOG("run task in not valid state %d\n", task->status);
     }
+
+    THIS_TASK = NULL;
 
 }
 
@@ -369,13 +374,12 @@ static void destroy_task(task_t * * const task) {
 
 /** put a task in sleep and switch to the scheduler
  *
- * @param task
  */
-void yield_task(task_t * const task) {
-    assert(NULL != task);
-    assert(NULL != task->sched);
-    task->status = WAIT;
-    if (unlikely(TASK_SWAP_CONTEXT(task, task->sched) == -1)) {
+void yield_task() {
+    assert(NULL != THIS_TASK);
+    assert(NULL != THIS_SCHED);
+    THIS_TASK->status = WAIT;
+    if (unlikely(TASK_SWAP_CONTEXT(THIS_TASK, THIS_SCHED) == -1)) {
         LOG("yield swapcontext error (%d): %s\n", errno, strerror(errno));
     }
     // if you are here means that you are waking up
@@ -383,11 +387,11 @@ void yield_task(task_t * const task) {
 
 /** wait
  *
- * @param task
+ * @param tid  id of thread to wakeup
  */
-void wait_task(task_t * const task, tid_t tid) {
-    assert(NULL != task);
-    assert(task->tid != tid);
+void wait_task(tid_t tid) {
+    assert(NULL != THIS_TASK);
+    assert(THIS_TID != tid);
 
     LOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 
@@ -400,34 +404,34 @@ void wait_task(task_t * const task, tid_t tid) {
     assert(NULL != newWaitCond);
 
     newWaitCond->next = NULL;
-    newWaitCond->task = task;
+    newWaitCond->task = THIS_TASK;
     LL_PREPEND(__mapTask__->listWaiting, newWaitCond);
 
     UNLOCK_AVAILABLE_TASK; // safe access to gAvailableTask
 
-    suspend_task(task);
+    suspend_task();
 }
 
 /** put a task in sleep and switch to the scheduler
  *
- * @param task
  */
-void suspend_task(task_t * const task) {
-    assert(NULL != task);
-    assert(NULL != task->sched);
-    task->status = SUSPENDED;
-    if (unlikely(TASK_SWAP_CONTEXT(task, task->sched) == -1)) {
+void suspend_task() {
+    assert(NULL != THIS_TASK);
+    assert(NULL != THIS_SCHED);
+    THIS_TASK->status = SUSPENDED;
+    if (unlikely(TASK_SWAP_CONTEXT(THIS_TASK, THIS_SCHED) == -1)) {
         LOG("yield swapcontext error (%d): %s\n", errno, strerror(errno));
     }
     // if you are here means that you are waking up
 }
 
-unsigned int isStopRequested_task(const task_t * const task) {
-    assert(NULL != task);
-    return task->stop;
+unsigned int isStopRequested_task() {
+    assert(NULL != THIS_TASK);
+    return THIS_TASK->stop;
 }
 
 void stopRequest_task(task_t * const task) {
+    assert(NULL != task);
     task->stop = 1;
 }
 
@@ -656,7 +660,8 @@ void mainloop_sched(sched_t * const sched) {
                     case RUNNING:
                         LOG("task ttid=%u terminate "
                                 "without call setReturnValue_task\n", task->task->tid);
-                        setReturnValue_task(task->task, 0);
+                        task->task->returnValue = 0;
+                        task->task->status = TERMINATED;
                         CDL_PREPEND(sched->readyTask, task);
                         wakeup = 0; // stop check status
                         break;

@@ -59,18 +59,50 @@
 /// Start Example
 static char const MESSAGE[] = "Hello, World!\n";
 
+// the following macro work on gcc because it supports
+// Statements and Declarations in Expressions
+// https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html
+//
+#define YIELD_EVSOCKET_READ_LINE(bev, retval, buffer, maxsize) ({              \
+    char *b = buffer;                                                          \
+    size_t toberead = maxsize;                                                 \
+    int datalen = 0;                                                           \
+    while (toberead > 0) {                                                     \
+        int dl = YIELD_EVSOCKET_READ(bev, retval, (void *) b, 1);              \
+        if ((retval.type == READ) && (dl == 1)) {                              \
+            if (*b == '\n') {                                                  \
+                break;                                                         \
+            }                                                                  \
+            b ++; datalen++; toberead--;                                       \
+        } else { break; }                                                      \
+    }                                                                          \
+    datalen;                                                                   \
+
+#define YIELD_EVSOCKET_READ_LINE_TIMEOUT(bev, retval, buffer, maxsize, t) ({   \
+    char *b = buffer;                                                          \
+    size_t toberead = maxsize;                                                 \
+    int datalen = 0;                                                           \
+    while (toberead > 0) {                                                     \
+        int dl = YIELD_EVSOCKET_READ_TIMEOUT(bev, retval, (void *) b, 1, t);   \
+        if ((retval.type == READ) && (dl == 1)) {                              \
+            if (*b == '\n') {                                                  \
+                break;                                                         \
+            }                                                                  \
+            b ++; datalen++; toberead--;                                       \
+        } else { break; }                                                      \
+    }                                                                          \
+    datalen;                                                                   \
+});
+
 /** task that read from socket
  *
- * @param tid  my thread id
  */
-static void task_socket(tid_t const tid) {
+static void task_socket() {
     uint8_t readingBuffer[1024];
     int datalen;
     int i;
 
     struct timeval const ten_sec = {10, 0};
-
-    INIT_TASK;
 
     evutil_socket_t * const fd = (evutil_socket_t *) (THIS_TASK->data);
     /* We got a new connection! Set up a bufferevent for it. */
@@ -81,7 +113,8 @@ static void task_socket(tid_t const tid) {
     int running = 1;
 
     while ((NULL != bev) && running && !ISSTOPREQUESTTASK) {
-        datalen = YIELD_EVSOCKET_READ_TIMEOUT(bev, retval, (void *) readingBuffer, sizeof (readingBuffer), ten_sec);
+        //datalen = YIELD_EVSOCKET_READ_TIMEOUT(bev, retval, (void *) readingBuffer, sizeof (readingBuffer), ten_sec);
+        datalen = YIELD_EVSOCKET_READ_LINE_TIMEOUT(bev, retval, (void *) readingBuffer, sizeof (readingBuffer), ten_sec);
 
 checkreturn: // label to mark check returned value
         switch (retval.type) {
@@ -140,10 +173,8 @@ checkreturn: // label to mark check returned value
 
 /** task that accept new socket
  *
- * @param tid  my thread id
  */
-static void task_listen(tid_t const tid) {
-    INIT_TASK;
+static void task_listen() {
 
     struct sockaddr_in sin;
 
@@ -214,10 +245,8 @@ static void task_listen(tid_t const tid) {
 
 /** task that connect to a listening socket
  *
- * @param tid  my thread id
  */
-static void task_connect(tid_t const tid) {
-    INIT_TASK;
+static void task_connect() {
 
     DEF_SOCKET_RETVAL(retval);
 
@@ -269,10 +298,8 @@ static void task_connect(tid_t const tid) {
 
 /** task that show how sleep works
  *
- * @param tid  my thread id
  */
-static void task_stress(tid_t const tid) {
-    INIT_TASK;
+static void task_stress() {
 
     struct timeval const five_sec = {0, 500000 /* us */};
 
@@ -310,12 +337,18 @@ static void task_stress(tid_t const tid) {
 
 #include <sys/time.h>                // for gettimeofday()
 
+static int async_function_sleep(int i) {
+    struct timeval const five_sec = {5, 0};
+    if (YIELD_EVSLEEP(five_sec)) { // task wakeup for timeout
+        LOG("async function");
+    }
+    return (i + 1);
+}
+
 /** task that show how sleep works
  *
- * @param tid  my thread id
  */
-static void task_counter(tid_t const tid) {
-    INIT_TASK;
+static void task_counter() {
 
     struct timeval t1;
     struct timeval t2;
@@ -326,6 +359,9 @@ static void task_counter(tid_t const tid) {
     int i = 0;
     int running = 1;
     while (running && !ISSTOPREQUESTTASK) {
+        int app = async_function_sleep(2);
+        LOG("app %d", app);
+
         gettimeofday(&t1, NULL);
         if (YIELD_EVSLEEP(five_sec)) { // task wakeup for timeout
             gettimeofday(&t2, NULL);
@@ -349,10 +385,8 @@ static void task_counter(tid_t const tid) {
 
 /** task that manage SIGINT signal
  *
- * @param tid  my thread id
  */
-static void task_signal(tid_t const tid) {
-    INIT_TASK;
+static void task_signal() {
 
     int running = 1;
     while (running && !ISSTOPREQUESTTASK) {
@@ -389,10 +423,8 @@ static int recursion(int i) {
 
 /** task that test stack usage
  *
- * @param tid  my thread id
  */
-static void task_stack_test(tid_t const tid) {
-    INIT_TASK;
+static void task_stack_test() {
 
     int running = 1;
     int i = 1;

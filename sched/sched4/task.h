@@ -72,8 +72,7 @@ extern "C" {
     typedef struct task task_t; /**< task type */
     typedef struct sched sched_t; /**< scheduler type */
 
-    typedef void (*taskFunc_t)(task_t *task); /**< prototype for any task functions
-                                           */
+    typedef void (*taskFunc_t)(); /**< prototype for any task functions */
 
     /** task status type
      */
@@ -153,17 +152,17 @@ extern "C" {
     };
 
     // task
-    void setReturnValue_task(task_t * const task, int value);
+    void setReturnValue_task(int value);
 
-    void yield_task(task_t * const task);
+    void yield_task();
 
-    void wait_task(task_t * const task, tid_t tid);
+    void wait_task(tid_t tid);
 
-    void suspend_task(task_t * const task);
+    void suspend_task();
 
     void schedule_task(task_t * const task);
 
-    unsigned int isStopRequested_task(const task_t * const task);
+    unsigned int isStopRequested_task();
 
     void stopRequest_task(task_t * const task);
 
@@ -188,17 +187,27 @@ extern "C" {
 
     size_t getStackSize(const task_t *);
 
+#ifdef THREADSAFE_SCHED
+#define task_thread_local __thread
+#else
+#define task_thread_local
+#endif
 
-#define INIT_TASK task_t * const THIS_TASK = getTask(tid)
+    extern task_thread_local task_t * THIS_TASK;
 
-#define RETURN_TASK(x) setReturnValue_task(THIS_TASK, 1); return
+#define THIS_TID THIS_TASK->tid
 
-#define YIELD yield_task(THIS_TASK)
-#define WAITTASK(x) wait_task(THIS_TASK, x)
-#define SUSPEND suspend_task(THIS_TASK)
+#define RETURN_TASK(x) setReturnValue_task(x); return
+
+#define YIELD yield_task()
+#define WAITTASK(x) wait_task(x)
+#define STOP_REQUEST(tid) stopRequest_task(getTask(tid))
+#define SUSPEND suspend_task()
 #define RESUME(tid) schedule_task(getTask(tid))
-#define ISSTOPREQUESTTASK isStopRequested_task(THIS_TASK)
+#define ISSTOPREQUESTTASK isStopRequested_task()
 #define THIS_SCHED THIS_TASK->sched
+#define THIS_SCHED_BASE THIS_SCHED->base
+
 #define RESUMEP(ptid) schedule_task(ptid)
 
     typedef void (*iterOnTask)(task_t * const task);

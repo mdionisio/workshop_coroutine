@@ -473,11 +473,11 @@ int yield_socket_ev(struct bufferevent * const bev,
             /* read  */ echo_read_cb,
             /* write */ echo_write_cb,
             /* event */ echo_event_cb, returnValue);
-    bufferevent_enable(bev, EV_READ || EV_WRITE);
+    bufferevent_enable(bev, EV_READ | EV_WRITE);
     LOG("task %u wait read/write", THIS_TID);
     suspend_task(); // task suspend;
     LOG("task %u resume for read/write", THIS_TID);
-    bufferevent_disable(bev, EV_READ || EV_WRITE);
+    bufferevent_disable(bev, EV_READ | EV_WRITE);
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 
     if (NULL != ev_timeout) {
@@ -504,11 +504,11 @@ int yield_socket_ev_connect(struct bufferevent * const bev,
             /* read  */ echo_read_cb,
             /* write */ echo_write_cb,
             /* event */ echo_event_cb, returnValue);
-    bufferevent_enable(bev, EV_READ || EV_WRITE);
+    bufferevent_enable(bev, EV_READ | EV_WRITE);
 
     if (unlikely(bufferevent_socket_connect_hostname(
             bev, dns_base, family, hostname, port) == -1)) {
-        bufferevent_disable(bev, EV_READ || EV_WRITE);
+        bufferevent_disable(bev, EV_READ | EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
         returnValue->type = UNKONWN;
         returnValue->events = 0;
@@ -535,7 +535,7 @@ int yield_socket_ev_connect(struct bufferevent * const bev,
         LOG("task %u wait read/write/event", THIS_TID);
         suspend_task(); // task suspend;
         LOG("task %u wait read/write/event", THIS_TID);
-        bufferevent_disable(bev, EV_READ || EV_WRITE);
+        bufferevent_disable(bev, EV_READ | EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
 
         if (NULL != ev_timeout) {

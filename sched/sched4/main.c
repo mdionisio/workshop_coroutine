@@ -77,6 +77,8 @@ static char const MESSAGE[] = "Hello, World!\n";
         } else { break; }                                                      \
     }                                                                          \
     datalen;                                                                   \
+    });
+
 
 #define YIELD_EVSOCKET_READ_LINE_TIMEOUT(bev, retval, buffer, maxsize, t) ({   \
     char *b = buffer;                                                          \
@@ -92,7 +94,7 @@ static char const MESSAGE[] = "Hello, World!\n";
         } else { break; }                                                      \
     }                                                                          \
     datalen;                                                                   \
-});
+    });
 
 /** task that read from socket
  *

@@ -7,7 +7,7 @@
 
 // if you build with -std=c99 you need the following header
 // otherwise ucontext.h will be different
-// if you uild with -std=gnu99 everything is ok
+// if you build with -std=gnu99 everything is ok
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #else
@@ -33,15 +33,15 @@
 #include <errno.h>
 #include <string.h>
 
-typedef enum { false=0, true=1 } bool;
+#include <stdbool.h>
 
 void outdata(int data, bool more);
 bool indata(int *data);
 
-/** produce a sequence of 10 number
+/** produce a sequence of 10 numbers
  * 
  */
-void producer() {
+void producer(void) {
     printf("--> producer start .\n");
     int i;
     for (i=0; i<10; i++) {
@@ -49,14 +49,15 @@ void producer() {
         outdata(i, true);
     }
     outdata(0, false);
-    // never reach this point
+    // never reach this point: the consumer stops pulling after the last
+    // outdata, so the producer stays suspended forever
     printf("--> producer end .you don't see it\n");
 }
 
 /** Consume all the data available
  * 
  */
-void consumer() {
+void consumer(void) {
     int data;
     printf("--> consumer start .\n");
     // while there is data
@@ -133,7 +134,7 @@ int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
 
-    consumer(); // start only consumer because it pull data from producer
+    consumer(); // start only consumer because it pulls data from producer
 
     return 0;
 }

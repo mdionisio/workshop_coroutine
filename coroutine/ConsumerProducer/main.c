@@ -35,7 +35,7 @@
 
 typedef enum { false=0, true=1 } bool;
 
-void outdata(int data, bool eof);
+void outdata(int data, bool more);
 bool indata(int *data);
 
 /** produce a sequence of 10 number
@@ -67,78 +67,73 @@ void consumer() {
 }
 
 // NOW we start the magic code ...
+//
+// The producer runs on its own private stack (created with makecontext).
+// If producer and consumer shared the same stack, every call made by the
+// consumer after a switch would overwrite the suspended producer frames
+// (return address, locals, ...) and resuming the producer would crash.
 
-ucontext_t contextProducer;
-volatile bool contextProducerValid = false;
+#define PRODUCER_STACK_SIZE (64 * 1024)
 
-ucontext_t contextConsumer;
-volatile bool contextConsumerValid = false;;
+static ucontext_t contextProducer;
+static ucontext_t contextConsumer;
+static char producerStack[PRODUCER_STACK_SIZE];
+static bool producerStarted = false;
 
-int tmpData;
-bool tmpEof = true;
+static int tmpData;
+static bool tmpMore = false;   // true if tmpData contains a valid value
 
-bool hereForCallProducer;
-bool hereForCallContumer;
-        
-void outdata(int data, bool eof) {
-    hereForCallProducer = true;
+void outdata(int data, bool more) {
     tmpData = data;
-    tmpEof = eof;
-    printf("--> save producer context \n");
-    if (getcontext(&contextProducer) == -1) {
-        printf("getcontext error (%d): %s\n", errno, strerror(errno));
-    }
-    contextProducerValid = true;
-    if (contextConsumerValid && hereForCallProducer) {
-        hereForCallContumer = false;
-        printf("--> goto consumer context \n");
-        setcontext(&contextConsumer);
+    tmpMore = more;
+    // save producer context and go back to the consumer
+    printf("--> goto consumer context \n");
+    if (swapcontext(&contextProducer, &contextConsumer) == -1) {
+        printf("swapcontext error (%d): %s\n", errno, strerror(errno));
+        exit(EXIT_FAILURE);
     }
 }
 
 bool indata(int *data) {
-    hereForCallContumer = true;                  // set a flag to mark
-                                                 // that we are here because we 
-                                                 // have call the function
-    // save context
-    printf("--> save consumer context \n");
-    if (getcontext(&contextConsumer) == -1) {
-        printf("getcontext error (%d): %s\n", errno, strerror(errno));
-    }
-    contextConsumerValid = true;                 // the consumer context is valid
-    
     // if it is the first time that we call indata
-    // we have to start producer
-    if (!contextProducerValid && hereForCallContumer) {
-        printf("--> producer is not started, start \n");
-        producer();  // start producer
-        // never reach this point
-        printf("--> you don't see it\n");
+    // we have to create the producer context with its own stack
+    if (!producerStarted) {
+        printf("--> producer is not started, create it \n");
+        if (getcontext(&contextProducer) == -1) {
+            printf("getcontext error (%d): %s\n", errno, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        contextProducer.uc_stack.ss_sp = producerStack;
+        contextProducer.uc_stack.ss_size = sizeof(producerStack);
+        contextProducer.uc_link = &contextConsumer; // if producer returns, come back here
+        makecontext(&contextProducer, producer, 0);
+        producerStarted = true;
     }
-    
-    // if we are here because we have call the function we switch to producer 
-    // so we ask to poll data
-    if (contextProducerValid && hereForCallContumer) {
-        hereForCallProducer = false;
-        printf("--> goto saved producer context \n");
-        setcontext(&contextProducer);
-        printf("--> you don't see it\n");
-        return (0);
-    } else {
-        // otherwise the data is pulled and we consume it
-        printf("--> data pulled\n");
-        *data = tmpData;
-        return tmpEof;
+
+    // if producer ends without calling outdata, there is no more data
+    tmpMore = false;
+
+    // save consumer context and ask the producer to produce data
+    printf("--> goto producer context \n");
+    if (swapcontext(&contextConsumer, &contextProducer) == -1) {
+        printf("swapcontext error (%d): %s\n", errno, strerror(errno));
+        exit(EXIT_FAILURE);
     }
+
+    // here the data is pulled and we consume it
+    printf("--> data pulled\n");
+    *data = tmpData;
+    return tmpMore;
 }
 
 /*
  * 
  */
 int main(int argc, char* argv[]) {
-    
+    (void)argc;
+    (void)argv;
+
     consumer(); // start only consumer because it pull data from producer
 
     return 0;
 }
-
